@@ -106,8 +106,8 @@ def demangle_name(name):
 
 class NimName():
     def __init__(self, namestr):
-        m = re.fullmatch(r'@?([a-zA-Z0-9]+_?)__(.*)(_[0-9]+)(@[0-9]+)?', namestr)
-        if m is None:
+        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_[a-z0-9]+)(@[0-9]+)?', namestr)
+        if m is None or len(m.group(1)) <= 1:
             raise ValueError("Invalid NIM name \"{}\"".format(namestr))
         self.fnname = demangle_name(m.group(1))
         self.pkgname = demangle_module(m.group(2))

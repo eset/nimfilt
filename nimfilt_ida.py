@@ -13,7 +13,7 @@ def parse_nim_functions():
 
         try:
             niname = nimfilt.NimName(name)
-            yield start_ea, niname
+            yield func.start_ea, niname
         except ValueError:
             pass
         func = idaapi.get_next_func(func.start_ea)
@@ -36,14 +36,13 @@ def get_package_types(pkgnames: list):
         if ntpath.isabs(pkg):
             absolute.add(pkg)
         else:
-            relative.add(pkgname)
+            relative.add(pkg.pkgname)
     return relative, absolute
 
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # TODO: Remove superfluous directory levels
 func_dir = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
 for ea, nname in parse_nim_functions():
-    func_dir.mkdir
     ida_name = rename(ea, nname)
     func_dir.mkdir(nname.pkgname)
     func_dir.rename(ida_name, "{}/{}".format(nname.pkgname, ida_name))
