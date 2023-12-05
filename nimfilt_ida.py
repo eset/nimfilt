@@ -20,10 +20,10 @@ def parse_nim_functions():
 
 # Rename function. Use mangler generated suffix if there is a duplicate
 def rename(ea, nname):
-    if idaapi.set_name(ea, nname.clean_name):
-        return nname.clean_name
+    if idaapi.set_name(ea, nname.ida_name):
+        return nname.ida_name
     else:
-        ida_name = "{}_{}".format(nname.clean_name, nname.suffix)
+        ida_name = "{}_{}".format(nname.ida_name, nname.suffix)
         idaapi.set_name(ea, ida_name)
         return ida_name
 
@@ -46,4 +46,4 @@ for ea, nname in parse_nim_functions():
     func_dir.mkdir
     ida_name = rename(ea, nname)
     func_dir.mkdir(nname.pkgname)
-    func_dir.rename(ida_name, "{}/{}".format(nname.pkgname(), ida_name))
+    func_dir.rename(ida_name, "{}/{}".format(nname.pkgname, ida_name))

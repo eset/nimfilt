@@ -7,10 +7,13 @@ from binascii import unhexlify
 NIM_STD = ["system", "pure", "impure", "std", "windows"]
 # TODO check non-windows "wrappers"
 
+# adapted from clean_function_name in https://github.com/SentineLabs/AlphaGolang/blob/main/2.function_discovery_and_renaming.py
 def _clean_name_ida(name):
-    STRIP_CHARS = '[()\[\]{} "]'
-    REPLACE_CHARS = '[.*-,;:/\\]'
-    name = re.sub(STRIP_CHAR, "", name)
+    STRIP_CHARS = r'[()\[\]{} "]'
+    REPLACE_CHARS = r'[.*\-,;:/\\]'
+    name = re.sub(STRIP_CHARS, "", name)
+    name = re.sub("=", "EQ", name)
+    name = re.sub("-", "MINUS", name)
     return re.sub(REPLACE_CHARS, "_", name)
 
 # See https://github.com/nim-lang compiler/msgs.nim:uniqueModuleName
@@ -122,6 +125,13 @@ class NimName():
     @property
     def clean_name(self):
         return "{}::{}".format(self._clean_pkgname, self._clean_fnname)
+
+    @property
+    def ida_name(self):
+        if len(self.num_args) > 0:
+            return("@{}{}".format(self.clean_name, self.num_args))
+        else:
+            return self.clean_name
 
     def is_std_function(self):
         return any([self.pkgname.startswith(std) for std in NIM_STD])
