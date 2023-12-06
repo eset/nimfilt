@@ -2,18 +2,44 @@
 import sys
 import string
 import re
+import ntpath
 from binascii import unhexlify
+from functools import reduce
 
-NIM_STD = ["system", "pure", "impure", "std", "windows"]
-# TODO check non-windows "wrappers"
+NIM_STD = ["system", "core", "pure", "js", "impure", "std", "windows", "posix", "wrappers"]
+SUF_NONE = 0
+SUF_NIM = 1
+SUF_IDA = 2
+
+def _encode_specialchars(string):
+    convs = {
+        "$": "DOLLAR",
+        "%": "PERCENT",
+        "&": "AND",
+        "^": "ROOF",
+        "!": "EXCL",
+        "?": "QMARK",
+        "*": "STAR",
+        "+": "PLUS",
+        "-": "MINUS",
+        "/": "SLASH",
+        "\\": "BSLASH",
+        "=": "EQ",
+        "<": "LT",
+        ">": "GT",
+        "~": "TILDE",
+        ":": "COLON",
+        ".": "DOT",
+        "@": "AT",
+        "|": "PIPE"
+    }
+    return reduce(lambda s, conv: s.replace(conv[0], conv[1]), convs.items(), string)
 
 # adapted from clean_function_name in https://github.com/SentineLabs/AlphaGolang/blob/main/2.function_discovery_and_renaming.py
 def _clean_name_ida(name):
     STRIP_CHARS = r'[()\[\]{} "]'
-    REPLACE_CHARS = r'[.*\-,;:/\\]'
+    REPLACE_CHARS = r'[,;]'
     name = re.sub(STRIP_CHARS, "", name)
-    name = re.sub("=", "EQ", name)
-    name = re.sub("-", "MINUS", name)
     return re.sub(REPLACE_CHARS, "_", name)
 
 # See https://github.com/nim-lang compiler/msgs.nim:uniqueModuleName
@@ -47,7 +73,7 @@ def __Xsubstring(substring):
     else:
         return "X",1
 
-def __specialchar(substring):
+def __decode_specialchar(substring):
     convs = {
         "dollar": "$",
         "percent": "%",
@@ -95,7 +121,7 @@ def demangle_name(name):
             i += l
             plain = plain + v
         elif name[i] in string.ascii_lowercase:
-            v,l = __specialchar(name[i:])
+            v,l = __decode_specialchar(name[i:])
             i += l
             plain = plain + v
         else:
@@ -106,32 +132,37 @@ def demangle_name(name):
 
 class NimName():
     def __init__(self, namestr):
-        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_[a-z0-9]+)(@[0-9]+)?', namestr)
+        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u[0-9]+)(_[0-9]+)?(@[0-9]+)?', namestr)
         if m is None or len(m.group(1)) <= 1:
             raise ValueError("Invalid NIM name \"{}\"".format(namestr))
         self.fnname = demangle_name(m.group(1))
         self.pkgname = demangle_module(m.group(2))
         self.suffix = m.group(3)[1:]
-        self.num_args = m.group(4)
+        self.ida_suffix = m.group(4)
+        self.num_args = m.group(5)
 
     @property
     def _clean_pkgname(self):
-        return _clean_name_ida(self.pkgname)
+        return re.sub(r"[/\\\-.]", "_", _clean_name_ida(self.pkgname))
 
     @property
     def _clean_fnname(self):
-        return _clean_name_ida(self.fnname)
+        name = _clean_name_ida(self.fnname)
+        return _encode_specialchars(name)
 
     @property
     def clean_name(self):
         return "{}::{}".format(self._clean_pkgname, self._clean_fnname)
 
-    @property
-    def ida_name(self):
-        if len(self.num_args) > 0:
-            return("@{}{}".format(self.clean_name, self.num_args))
-        else:
-            return self.clean_name
+    def get_ida_name(self, suffix=SUF_NONE):
+        name = self.clean_name
+        if suffix & SUF_NIM:
+            name = "{}_{}".format(name, self.suffix)
+        if suffix & SUF_IDA:
+            name = "{}_{}".format(name, self.ida_suffix)
+        if self.num_args is not None and len(self.num_args) > 0:
+            name = "@{}{}".format(name, self.num_args)
+        return name
 
     def is_std_function(self):
         return any([self.pkgname.startswith(std) for std in NIM_STD])
