@@ -1,8 +1,9 @@
 import nimfilt
-import ntpath
+import posixpath
 
 import idaapi
 import ida_dirtree
+import ida_name
 
 # Parse all functions in the current IDB for ones that have nim mangled names
 def parse_nim_functions():
@@ -19,30 +20,49 @@ def parse_nim_functions():
         func = idaapi.get_next_func(func.start_ea)
 
 # Rename function. Use mangler generated suffix if there is a duplicate
-def rename(ea, nname):
-    if idaapi.set_name(ea, nname.ida_name):
-        return nname.ida_name
-    else:
-        ida_name = "{}_{}".format(nname.ida_name, nname.suffix)
-        idaapi.set_name(ea, ida_name)
-        return ida_name
+def rename(ea, nname: nimfilt.NimName):
+    name = nname.get_ida_name()
+    if ida_name.get_name_ea(0, name) != idaapi.BADADDR:
+        name = nname.get_ida_name(suffix=nimfilt.SUF_NIM)
+        if ida_name.get_name_ea(0, name) != idaapi.BADADDR:
+            name = nname.get_ida_name(suffix=nimfilt.SUF_NIM | nimfilt.SUF_IDA)
+    idaapi.set_name(ea, name)
+    return name
 
-# Packages with an absolute path are locally installed (usually nimble)
-# Those with a relative path are either from the stdlib or defined in the current project. TODO: differentiate them
-def get_package_types(pkgnames: list):
-    absolute = set()
-    relative = set()
-    for pkg in pkgnames:
-        if ntpath.isabs(pkg):
-            absolute.add(pkg)
+# Recursively merge directories that only have a single child that's also a directory
+def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
+    iterator = ida_dirtree.dirtree_iterator_t()
+    ok = dirtree.findfirst(iterator, "{}/*".format(path))
+    has_fn = False
+
+    # Moving and deleting directories messes with the iterator so we list all the children first
+    children = []
+    while ok:
+        child_path = dirtree.get_abspath(iterator.cursor)
+        children.append(child_path)
+        ok = dirtree.findnext(iterator)
+
+    new_children = []
+    for child_path in children:
+        if dirtree.isdir(child_path):
+            child_path = merge_dir(dirtree, child_path)
         else:
-            relative.add(pkg.pkgname)
-    return relative, absolute
+            has_fn = True
+        new_children.append(child_path)
+    if len(children) == 1 and not has_fn:
+        # Ida uses POSIX-like path so we use the \\ as an internal separator in directory names
+        new_path = "{}\\{}".format(path, posixpath.basename(child_path))
+        dirtree.rename(child_path, new_path)
+        dirtree.rmdir(path)
+        return new_path
+    return path
 
 # TODO: create separate root level directories for Stdlib, project and nimble packages
-# TODO: Remove superfluous directory levels
-func_dir = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
+# Rename functions and move them to subdirectories based on the package path/name
+func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
 for ea, nname in parse_nim_functions():
-    ida_name = rename(ea, nname)
-    func_dir.mkdir(nname.pkgname)
-    func_dir.rename(ida_name, "{}/{}".format(nname.pkgname, ida_name))
+    name = rename(ea, nname)
+    func_dirtree.mkdir(nname.pkgname)
+    func_dirtree.rename(name, "{}/{}".format(nname.pkgname, name))
+
+merge_dir(func_dirtree)
