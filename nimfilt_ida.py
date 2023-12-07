@@ -13,7 +13,7 @@ def parse_nim_functions():
         name = idaapi.get_func_name(func.start_ea)
 
         try:
-            niname = nimfilt.NimName(name)
+            niname = nimfilt.NimNameCreator(name)
             yield func.start_ea, niname
         except ValueError:
             pass

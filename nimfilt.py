@@ -198,10 +198,38 @@ class NimName():
     def __repr__(self):
         return "{:s}({:s})".format(type(self).__name__, str(self))
 
+class NimInitName(NimName):
+    def __init__(self, namestr):
+        m = re.fullmatch(r'@?((at|@)m.+)_((Dat|Hcr)?Init[0-9]{3})(_[0-9+])?(@[0-9]+)?', namestr)
+        if m is None:
+            raise ValueError("Invalid NIM Init name \"{}\"".format(namestr))
+        self.fnname = m.group(3)
+        pkgname = m.group(1)
+        if m.group(2) == "at":
+            pkgname = _decode_specialchars(pkgname)
+        # TODO: Differentiate file and module name if they're not the same
+        self.pkgname = _decode_module_name(pkgname)
+        self.suffix = None
+        self.ida_suffix = m.group(5)
+        self.num_args = m.group(6)
+
+    def __str__(self):
+        return "{}::{}".format(self.pkgname, self.fnname)
+
+# Returns an instance of the correct subtype of NimName based on the name given
+def NimNameCreator(namestr: str) -> NimName:
+    for T in [*NimName.__subclasses__(), NimName]:
+        try:
+            name = T(namestr)
+            return name
+        except ValueError:
+            pass
+    raise ValueError("Invalid Nim name \"{}\"".format(namestr))
+
 if __name__ == "__main__":
     name = sys.argv[1]
     try:
-        demangled = NimName(name)
-        print(demangled)
+        n = NimNameCreator(name)
+        print(n)
     except ValueError:
         print(name)
