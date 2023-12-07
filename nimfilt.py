@@ -11,7 +11,44 @@ SUF_NONE = 0
 SUF_NIM = 1
 SUF_IDA = 2
 
-def _encode_specialchars(string):
+SPECIAL_CHAR_CONVS = {
+    "dollar": "$",
+    "percent": "%",
+    "amp": "&",
+    "roof": "^",
+    "emark": "!",
+    "qmark": "?",
+    "star": "*",
+    "plus": "+",
+    "minus": "-",
+    "backslash": "\\",
+    "slash": "/",
+    "eq": "=",
+    "lt": "<",
+    "gt": ">",
+    "tilde": "~",
+    "colon": ":",
+    "dot": ".",
+    "at": "@",
+    "bar": "|"
+}
+
+def _multi_replace(stri: str, conversions: dict) -> str:
+    return reduce(lambda s, conv: s.replace(conv[0], conv[1]), conversions.items(), stri)
+
+# return first match + length of key
+def __decode_specialchar(substri):
+    try:
+        fnd_key = list(filter(lambda k: substri.startswith(k), SPECIAL_CHAR_CONVS.keys()))[0]
+        return convs[fnd_key],len(fnd_key)
+    except IndexError:
+         return substri[0], 1
+
+# Return string with replacements
+def _decode_specialchars(stri: str) -> str:
+    return _multi_replace(stri, SPECIAL_CHAR_CONVS)
+
+def _encode_specialchars(stri: str) -> str:
     convs = {
         "$": "DOLLAR",
         "%": "PERCENT",
@@ -33,17 +70,28 @@ def _encode_specialchars(string):
         "@": "AT",
         "|": "PIPE"
     }
-    return reduce(lambda s, conv: s.replace(conv[0], conv[1]), convs.items(), string)
+    return _multi_replace(stri, convs)
+
+# compiler/modulepaths;.nim -> demangleModuleName
+def _decode_module_name(module_name: str) -> str:
+    convs = {
+        "@s": "/",
+        "@h": "#",
+        "@c": ":",
+        "@m": "",
+        "@@": "@"
+    }
+    return _multi_replace(module_name, convs)
 
 # adapted from clean_function_name in https://github.com/SentineLabs/AlphaGolang/blob/main/2.function_discovery_and_renaming.py
-def _clean_name_ida(name):
+def _clean_name_ida(name: str) -> str:
     STRIP_CHARS = r'[()\[\]{} "]'
     REPLACE_CHARS = r'[,;]'
     name = re.sub(STRIP_CHARS, "", name)
     return re.sub(REPLACE_CHARS, "_", name)
 
-# See https://github.com/nim-lang compiler/msgs.nim:uniqueModuleName
-def demangle_module(name):
+# compiler/msgs.nim -> uniqueModuleName
+def demangle_module(name: str) -> str:
     plain = ""
     i = 0
     while i < len(name):
@@ -64,45 +112,17 @@ def demangle_module(name):
         i+=1
     return plain
 
-
+# Parse hex encoded substrings strings
 def __Xsubstring(substring):
     if len(substring) < 3:
-        return "X",1
+        return "X", 1
     elif all(map(lambda c: c in string.hexdigits.upper(), substring[1:3])):
         return unhexlify(substring[1:3]).decode("utf-8"),3
     else:
-        return "X",1
-
-def __decode_specialchar(substring):
-    convs = {
-        "dollar": "$",
-        "percent": "%",
-        "amp": "&",
-        "roof": "^",
-        "emark": "!",
-        "qmark": "?",
-        "star": "*",
-        "plus": "+",
-        "minus": "-",
-        "slash": "/",
-        "backslash": "\\",
-        "eq": "=",
-        "lt": "<",
-        "gt": ">",
-        "tilde": "~",
-        "colon": ":",
-        "dot": ".",
-        "at": "@",
-        "bar": "|"
-    }
-    try:
-        fnd_key = list(filter(lambda k: substring.startswith(k), convs.keys()))[0]
-        return convs[fnd_key],len(fnd_key)
-    except IndexError:
-         return substring[0], 1
+        return "X", 1
 
 # See https://github.com/nim-lang compiler/ccgutils.nim:mangle
-def demangle_name(name):
+def demangle_function(name: str) -> str:
     plain = ""
     if name[-1] != "_": #underscore is added at the end of the name if any special encoding had to be performed
         if name[0] == "X":
@@ -130,12 +150,13 @@ def demangle_name(name):
 
     return plain
 
+# Represents a regular Package+function name
 class NimName():
     def __init__(self, namestr):
         m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u[0-9]+)(_[0-9]+)?(@[0-9]+)?', namestr)
         if m is None or len(m.group(1)) <= 1:
-            raise ValueError("Invalid NIM name \"{}\"".format(namestr))
-        self.fnname = demangle_name(m.group(1))
+            raise ValueError("Invalid Nim function name \"{}\"".format(namestr))
+        self.fnname = demangle_function(m.group(1))
         self.pkgname = demangle_module(m.group(2))
         self.suffix = m.group(3)[1:]
         self.ida_suffix = m.group(4)
@@ -156,22 +177,26 @@ class NimName():
 
     def get_ida_name(self, suffix=SUF_NONE):
         name = self.clean_name
-        if suffix & SUF_NIM:
+        if suffix & SUF_NIM and self.suffix is not None:
             name = "{}_{}".format(name, self.suffix)
-        if suffix & SUF_IDA:
+        if suffix & SUF_IDA and self.ida_suffix is not None:
             name = "{}_{}".format(name, self.ida_suffix)
         if self.num_args is not None and len(self.num_args) > 0:
             name = "@{}{}".format(name, self.num_args)
         return name
 
-    def is_std_function(self):
+    # TODO: Implement check when a path is used as the package name
+    def is_std(self):
         return any([self.pkgname.startswith(std) for std in NIM_STD])
 
-    def is_nimble_function(self):
-        return os.path.isabs(self.pkgname) and "/.nimble/" in self.pkgname
+    def is_nimble(self):
+        return "/.nimble/" in self.pkgname
+
+    def __str__(self):
+        return "{}::{} {}".format(self.pkgname, self.fnname, self.suffix)
 
     def __repr__(self):
-        return "{}::{}  {}".format(self.pkgname, self.fnname, self.suffix)
+        return "{:s}({:s})".format(type(self).__name__, str(self))
 
 if __name__ == "__main__":
     name = sys.argv[1]
@@ -180,4 +205,3 @@ if __name__ == "__main__":
         print(demangled)
     except ValueError:
         print(name)
-        exit(1)
