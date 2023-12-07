@@ -26,7 +26,7 @@ def rename(ea, nname: nimfilt.NimName):
         name = nname.get_ida_name(suffix=nimfilt.SUF_NIM)
         if ida_name.get_name_ea(0, name) != idaapi.BADADDR:
             name = nname.get_ida_name(suffix=nimfilt.SUF_NIM | nimfilt.SUF_IDA)
-    idaapi.set_name(ea, name)
+    idaapi.set_name(ea, name, ida_name.SN_FORCE)
     return name
 
 # Recursively merge directories that only have a single child that's also a directory
