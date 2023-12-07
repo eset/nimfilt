@@ -37,12 +37,12 @@ def _multi_replace(stri: str, conversions: dict) -> str:
     return reduce(lambda s, conv: s.replace(conv[0], conv[1]), conversions.items(), stri)
 
 # return first match + length of key
-def __decode_specialchar(substri):
+def __decode_specialchar(substring):
     try:
-        fnd_key = list(filter(lambda k: substri.startswith(k), SPECIAL_CHAR_CONVS.keys()))[0]
-        return convs[fnd_key],len(fnd_key)
+        fnd_key = list(filter(lambda k: substring.startswith(k), SPECIAL_CHAR_CONVS.keys()))[0]
+        return SPECIAL_CHAR_CONVS[fnd_key],len(fnd_key)
     except IndexError:
-         return substri[0], 1
+         return substring[0], 1
 
 # Return string with replacements
 def _decode_specialchars(stri: str) -> str:
