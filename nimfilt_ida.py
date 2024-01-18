@@ -1,17 +1,19 @@
 import nimfilt
 import posixpath
 
-import idc
 import idaapi
 import ida_segment
 import ida_dirtree
 import ida_name
-import ida_ida
+import ida_nalt
 import ida_xref
 import ida_bytes
 import ida_struct
 
 from collections import namedtuple
+
+ST_NIMSTRING = 1
+ST_NIMSTRING_PTR = 2
 
 def iterate_segments():
     seg = ida_segment.get_first_seg()
@@ -19,13 +21,19 @@ def iterate_segments():
         yield seg
         seg = ida_segment.get_next_seg(seg.start_ea)
 
-def _build_strings_pe():
+def make_nim_strings():
     for seg in iterate_segments():
-        if seg.name in [".rdata", ".rodata"] or (seg.sclass == ida_segment.SEG_DATA and seg.perm == ida_segment.SEGPERM_READ):
+        if ida_segment.get_segm_name(seg) in [".rdata", ".rodata"] or (seg.type == ida_segment.SEG_DATA and seg.perm == ida_segment.SEGPERM_READ):
             ea = seg.start_ea
             while ea < seg.end_ea:
-                if is_nim_str(ea):
-                    pass # TODO
+                # Skip if the address is already typed as a struct
+                if not ida_bytes.is_struct(ida_bytes.get_flags(ea)) and (is_str := is_nim_str(ea)):
+                    if is_str[0] == ST_NIMSTRING:
+                        ea += apply_Nim_string_struct(*is_str[1:])
+                    elif is_str[0] == ST_NIMSTRING_PTR:
+                        ea += apply_Nim_string_ptr_struct(*is_str[1:])
+                    else:
+                        raise Exception()
                 else:
                     ea += 1
 
@@ -43,12 +51,12 @@ def is_nim_str_content(ea, ln):
 def is_nim_str(ea):
     ln = ida_bytes.get_dword(ea)
     # Contiguous block string
-    if is_nim_str_content(ea+4, ln):
-        return 1 # Apply struct
-    elif (addr := ida_xref.get_first_dref_from(ea+4)) != idaapi.BADADDR and is_nim_str_content(addr, ln):
-        return 2 # Apply struct
-    else:
-        return False
+    if ln > 0:
+        if is_nim_str_content(ea+4, ln):
+            return (ST_NIMSTRING, ea, ln)
+        elif (addr := ida_xref.get_first_dref_from(ea+4)) != idaapi.BADADDR and is_nim_str_content(addr, ln):
+            return (ST_NIMSTRING_PTR, ea, addr, ln)
+    return False
 
 """
 {
@@ -71,24 +79,29 @@ where reserved is 0x40000000 in ELFs and 0x40000000|length in PEs
 """
 StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
-    NimStringContent = [
-        StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, -1, 4),
-        StructMember("str", ida_bytes.FF_STRLIT, idc.STRTYPE_TERMCHR, 0)
-    ]
-    nsc_struct = create_IDA_struct("NimStringContent", NimStringContent)
+    str_opinfo = idaapi.opinfo_t()
+    str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
+    if nsc_struct_id := ida_struct.get_struc_id("NimStringContent") == idaapi.BADADDR:
+        NimStringContent = [
+            StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
+            StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
+        ]
+        nsc_struct = create_IDA_struct("NimStringContent", NimStringContent)
+        nsc_struct_id = nsc_struct.id
     # For structs or pointers to structs, the mt argument must be a opinfo_t struct with the tid field set to the structure's id
     nimstringcontent_opinfo = idaapi.opinfo_t()
-    nimstringcontent_opinfo.tid = nsc_struct.id
-    structs = {
-        "NimString": {
-            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, -1, 4),
+    nimstringcontent_opinfo.tid = nsc_struct_id
+    structs = {}
+    if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
+        structs["NimString"] = {
+            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
             StructMember("content", ida_bytes.FF_STRUCT|ida_bytes.FF_DATA, nimstringcontent_opinfo, 4) # Flags for structs
-        },
-        "NimStringPtr": {
-            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, -1, 4),
+        }
+    if ida_struct.get_struc_id("NimStringPtr") == idaapi.BADADDR:
+        structs["NimStringPtr"] = {
+            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
             StructMember("content", ida_bytes.FF_DWORD|ida_bytes.FF_0OFF|ida_bytes.FF_1OFF|ida_bytes.FF_DATA, nimstringcontent_opinfo, 4) # Flags for 32 bit pointers
         }
-    }
     for name, members in structs.items():
         create_IDA_struct(name, members)
 
@@ -100,9 +113,36 @@ def create_IDA_struct(name: str, members: list):
         ida_struct.add_struc_member(struct, field["name"], -1, field["flag"], field["member_type"], field["size"])
     return struct
 
+def apply_Nim_string_struct(start_addr, length):
+    struct_id = ida_struct.get_struc_id("NimString")
+    size = ida_struct.get_struc_size(struct_id) + length
+    ida_bytes.create_struct(start_addr, size, struct_id)
+    content = ida_bytes.get_bytes(start_addr+8, length)
+    ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
+    return size
+
+def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
+    ptr_struct_id = ida_struct.get_struc_id("NimStringPtr")
+    content_struct_id = ida_struct.get_struc_id("NimStringContent")
+    ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id)
+    size = ida_struct.get_struc_size(content_struct_id) + length
+    ida_bytes.create_struct(content_addr, size, content_struct_id)
+    content = ida_bytes.get_bytes(content_addr+4, length)
+    name = str_to_name(content)
+    ida_name.set_name(content_addr, name, ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
+    name = ida_name.get_name(content_addr) # Get final name in case IDA auto-added a suffix
+    ida_name.set_name(start_addr, "ptr_{:s}".format(name), ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
+    return ida_struct.get_struc_size(ptr_struct_id)
+
 # Returns a name like IDA's default names for string using s as a prefix instead of a
+# TODO: handle strings that contain only special characters
 def str_to_name(string):
-    cleaned = ida_name.validate_name(string, ida_name.NT_LOCAL).title().replace("_", "")
+    try:
+        default_encoding = ida_nalt.get_encoding_name(ida_nalt.get_default_encoding_idx(1))
+        string = string.decode(default_encoding)
+    except AttributeError:
+        pass
+    cleaned = ida_name.validate_name(string, ida_name.NT_LOCAL, ida_name.SN_IDBENC).title().replace("_", "")
     return "s{:s}".format(cleaned[:0xE])
 
 # Parse all functions in the current IDB for ones that have nim mangled names
