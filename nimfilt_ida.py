@@ -199,10 +199,12 @@ def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
 
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # Rename functions and move them to subdirectories based on the package path/name
-func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
-for ea, nname in parse_nim_functions():
-    name = rename(ea, nname)
-    func_dirtree.mkdir(nname.pkgname)
-    func_dirtree.rename(name, "{}/{}".format(nname.pkgname, name))
-
-merge_dir(func_dirtree)
+if __name__ == "__main__":
+    func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
+    for ea, nname in parse_nim_functions():
+        name = rename(ea, nname)
+        func_dirtree.mkdir(nname.pkgname)
+        func_dirtree.rename(name, "{}/{}".format(nname.pkgname, name))
+    merge_dir(func_dirtree)
+    create_Nim_string_structs()
+    make_nim_strings()
