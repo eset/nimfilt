@@ -45,7 +45,7 @@ def _is_valid_C_str(s: bytes):
 def is_nim_str_content(ea, ln):
     reserved = ida_bytes.get_dword(ea)
     if reserved ^ 0x40000000 in [0, ln]:
-         return _is_valid_C_str(ida_bytes.get_bytes(ea+4, ln+1))
+        return _is_valid_C_str(ida_bytes.get_bytes(ea+4, ln+1))
     return False
 
 def is_nim_str(ea):
@@ -81,7 +81,7 @@ StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
     str_opinfo = idaapi.opinfo_t()
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
-    if nsc_struct_id := ida_struct.get_struc_id("NimStringContent") == idaapi.BADADDR:
+    if (nsc_struct_id := ida_struct.get_struc_id("NimStringContent")) == idaapi.BADADDR:
         NimStringContent = [
             StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
             StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
@@ -199,7 +199,7 @@ def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
 
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # Rename functions and move them to subdirectories based on the package path/name
-if __name__ == "__main__":
+def main():
     func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
     for ea, nname in parse_nim_functions():
         name = rename(ea, nname)
@@ -208,3 +208,6 @@ if __name__ == "__main__":
     merge_dir(func_dirtree)
     create_Nim_string_structs()
     make_nim_strings()
+
+if __name__ == "__main__":
+    main()
