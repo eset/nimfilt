@@ -153,14 +153,15 @@ def demangle_function(name: str) -> str:
 # Represents a regular Package+function name
 class NimName():
     def __init__(self, namestr):
-        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u[0-9]+)(_[0-9]+)?(@[0-9]+)?', namestr)
+        # <Function name>__<Package Name>_u<numeric ID>_<numeric IDA suffix>.<compiler suffix>@<C++ mangled arguments>
+        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u[0-9]+)(_[0-9]+)?(\.[a-z]+\.[0-9]+)(@[0-9]+)?', namestr)
         if m is None or len(m.group(1)) <= 1:
             raise ValueError("Invalid Nim function name \"{}\"".format(namestr))
         self.fnname = demangle_function(m.group(1))
         self.pkgname = demangle_module(m.group(2))
         self.suffix = m.group(3)[1:]
         self.ida_suffix = m.group(4)
-        self.num_args = m.group(5)
+        self.num_args = m.group(6)
 
     @property
     def _clean_pkgname(self):
