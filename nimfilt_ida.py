@@ -1,14 +1,15 @@
 import nimfilt
 import posixpath
 
-import idaapi
-import ida_segment
-import ida_dirtree
-import ida_name
-import ida_nalt
-import ida_xref
 import ida_bytes
+import ida_dirtree
+import ida_funcs
+import ida_nalt
+import ida_name
+import ida_segment
 import ida_struct
+import ida_xref
+import idaapi
 
 from collections import namedtuple
 
@@ -81,7 +82,7 @@ where reserved is 0x40000000 in ELFs and 0x40000000|length in PEs
 """
 StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
-    str_opinfo = idaapi.opinfo_t()
+    str_opinfo = ida_nalt.opinfo_t()
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
     if (nsc_struct_id := ida_struct.get_struc_id("NimStringContent")) == idaapi.BADADDR:
         NimStringContent = [
@@ -91,7 +92,7 @@ def create_Nim_string_structs():
         nsc_struct = create_IDA_struct("NimStringContent", NimStringContent)
         nsc_struct_id = nsc_struct.id
     # For structs or pointers to structs, the mt argument must be a opinfo_t struct with the tid field set to the structure's id
-    nimstringcontent_opinfo = idaapi.opinfo_t()
+    nimstringcontent_opinfo = ida_nalt.opinfo_t()
     nimstringcontent_opinfo.tid = nsc_struct_id
     structs = {}
     if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
@@ -149,17 +150,17 @@ def str_to_name(string):
 
 # Parse all functions in the current IDB for ones that have nim mangled names
 def parse_nim_functions():
-    seg = idaapi.get_first_seg()
-    func = idaapi.get_next_func(seg.start_ea - 1)
+    seg = ida_segment.get_first_seg()
+    func = ida_funcs.get_next_func(seg.start_ea - 1)
     while func is not None:
-        name = idaapi.get_func_name(func.start_ea)
+        name = ida_funcs.get_func_name(func.start_ea)
 
         try:
             niname = nimfilt.NimNameCreator(name)
             yield func.start_ea, niname
         except ValueError:
             pass
-        func = idaapi.get_next_func(func.start_ea)
+        func = ida_funcs.get_next_func(func.start_ea)
 
 # Rename function. Use mangler generated suffix if there is a duplicate
 def rename(ea, nname: nimfilt.NimName):
@@ -168,7 +169,7 @@ def rename(ea, nname: nimfilt.NimName):
         name = nname.get_ida_name(suffix=nimfilt.SUF_NIM)
         if ida_name.get_name_ea(0, name) != idaapi.BADADDR:
             name = nname.get_ida_name(suffix=nimfilt.SUF_NIM | nimfilt.SUF_IDA)
-    idaapi.set_name(ea, name, ida_name.SN_FORCE)
+    ida_name.set_name(ea, name, ida_name.SN_FORCE)
     return name
 
 # Recursively merge directories that only have a single child that's also a directory
