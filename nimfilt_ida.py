@@ -7,6 +7,7 @@
 import nimfilt
 import posixpath
 
+import ida_auto
 import ida_bytes
 import ida_dirtree
 import ida_funcs
@@ -20,6 +21,9 @@ import idaapi
 from ida_idp import ph_get_cnbits
 from ida_ida import inf_get_app_bitness, inf_is_be
 from collections import namedtuple
+
+PLUGIN_NAME = "Nimfilt"
+VERSION = "1.0.0"
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
@@ -36,6 +40,34 @@ PROGRAM_END = ida_segment.get_last_seg().end_ea
 def get_uint(ea):
     bts = idaapi.get_bytes(ea, INT_BYTES, 0)
     return int.from_bytes(bts, ENDIANNESS, signed=False)
+
+class Nimfilt_plugin(idaapi.plugin_t):
+    comment = ""
+    flags = idaapi.PLUGIN_MOD
+    help = "Helps with reversing Nim compiled executables"
+    wanted_hotkey = ""
+    wanted_name = PLUGIN_NAME
+
+    def __init__(self):
+        super(Nimfilt_plugin, self)
+
+    def init(self):
+        global PROGRAM_END
+        PROGRAM_END = ida_segment.get_last_seg().end_ea
+
+        if is_nim_idb():
+            print("IDB identified as Nim.")
+            print("Running Nimfilt.")
+            main()
+        else:
+            print("IDB could not be confirmed as Nim. You can still run the plugin manually")
+        return idaapi.PLUGIN_KEEP
+
+    def run(self, arg):
+        main()
+
+    def term(self):
+        pass
 
 def iterate_segments():
     seg = ida_segment.get_first_seg()
@@ -257,3 +289,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def PLUGIN_ENTRY():
+    ida_auto.auto_wait()
+    return Nimfilt_plugin()
