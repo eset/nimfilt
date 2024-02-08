@@ -46,7 +46,7 @@ def _is_valid_C_str(s: bytes):
 
 def is_nim_str_content(ea, ln):
     reserved = ida_bytes.get_dword(ea)
-    if reserved ^ 0x40000000 in [0, ln] and ea+ln <= PROGRAM_END::
+    if reserved ^ 0x40000000 in [0, ln] and ea+ln <= PROGRAM_END:
         return _is_valid_C_str(ida_bytes.get_bytes(ea+4, ln+1))
     return False
 
