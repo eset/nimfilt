@@ -200,6 +200,23 @@ def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
         return new_path
     return path
 
+# Returns True if the function at ea has a name that matches known Nim functions
+def _nim_func_filter(ea):
+    NIM_FUNC_NAMES = ["NimMain", "NimMainInner", "NimMainModule"]
+    name = ida_funcs.get_name(ea)
+    return any(filter(lambda known_name: known_name in name, NIM_FUNC_NAMES))
+
+# Use simple heuristics to see if the currently open program is Nim
+def is_nim_idb():
+    # Based on our tests, these strings are present in all Nim binaries even if they are stripped. However, it would be trivial for a threat actor to remove them
+    if ida_search.find_text(0, 0, 0, "fatal.nim", ida_search.SEARCH_DOWN) != idaapi.BADADDR and ida_search.find_text(0, 0, 0, "sysFatal", ida_search.SEARCH_DOWN | ida_search.SEARCH_CASE) != idaapi.BADADDR:
+        return True
+    ## Other strings
+    ERR_MSG = ["@value out of range", "@division by zero", "@over- or underflow", "@index out of bounds"]
+    if any(filter(_nim_func_filter, idautils.Functions())):
+        return True
+    return False
+
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # Rename functions and move them to subdirectories based on the package path/name
 def main():
