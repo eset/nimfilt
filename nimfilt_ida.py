@@ -11,10 +11,18 @@ import ida_struct
 import ida_xref
 import idaapi
 
+from ida_ida import inf_get_cc_size_i
+from ida_idp import ph_get_cnbits()
 from collections import namedtuple
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
+
+# Flag that marks a string object as a string literal
+# 1 << (sizeof(int) * CHAR_BITS - 2) as per lib/nimbase.h
+NIM_STRLIT_FLAG = 1 << (inf_get_cc_size_i()  * ph_get_cnbits() - 2)
+if NIM_STRLIT_FLAG <= 0:
+    NIM_STRLIT_FLAG = 0x40000000 # This value is correct for almost all 32 and 64 bit compilers
 
 PROGRAM_END = ida_segment.get_last_seg().end_ea
 
@@ -47,10 +55,11 @@ def _is_valid_C_str(s: bytes):
 
 def is_nim_str_content(ea, ln):
     reserved = ida_bytes.get_dword(ea)
-    if reserved ^ 0x40000000 in [0, ln] and ea+ln <= PROGRAM_END:
+    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea+ln <= PROGRAM_END:
         return _is_valid_C_str(ida_bytes.get_bytes(ea+4, ln+1))
     return False
 
+# lib/system/strs_v2.nim -> NimStringV2
 def is_nim_str(ea):
     ln = ida_bytes.get_dword(ea)
     # Contiguous block string
@@ -62,34 +71,40 @@ def is_nim_str(ea):
     return False
 
 """
-{
-    DWORD reserved;
-    char  value[length];
-} StringContent
+Depending on the Nim version, strings can be represented one of a few ways:
+StringV2, lib/system/strs_v2.nim
+    NimStrPayload {
+        int cap;
+        char data[len+1];
+    }
+    NimString {
+        int len;
+        NimStrPayload* p;
+    }
 
-Nim strings are stored as
-{
-    DWORD length;
-    StringContent str;
-}
-OR in some cases
-{
-    DWORD length;
-    StringContent* str;
-} String
+Strings, lib/system.nim
+    TGenericSeq { //Generic sequence type
+        int len;
+        int reserved;
+    }
+    NimStringDesc {
+        TGenericSeq Sup;
+        char data[len+1];
+    }
 
-where reserved is 0x40000000 in ELFs and 0x40000000|length in PEs
+For string literals, the value of cap/reserved is ORed with NIM_STRLIT_FLAG
+reserved appears to be either 0 or cap
 """
 StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
     str_opinfo = ida_nalt.opinfo_t()
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
-    if (nsc_struct_id := ida_struct.get_struc_id("NimStringContent")) == idaapi.BADADDR:
-        NimStringContent = [
+    if (nsc_struct_id := ida_struct.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
+        NimStrPayload = [
             StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
             StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
         ]
-        nsc_struct = create_IDA_struct("NimStringContent", NimStringContent)
+        nsc_struct = create_IDA_struct("NimStrPayload", NimStrPayload)
         nsc_struct_id = nsc_struct.id
     # For structs or pointers to structs, the mt argument must be a opinfo_t struct with the tid field set to the structure's id
     nimstringcontent_opinfo = ida_nalt.opinfo_t()
@@ -126,7 +141,7 @@ def apply_Nim_string_struct(start_addr, length):
 
 def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
     ptr_struct_id = ida_struct.get_struc_id("NimStringPtr")
-    content_struct_id = ida_struct.get_struc_id("NimStringContent")
+    content_struct_id = ida_struct.get_struc_id("NimStrPayload")
     ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id)
     size = ida_struct.get_struc_size(content_struct_id) + length
     ida_bytes.create_struct(content_addr, size, content_struct_id)
