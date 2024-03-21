@@ -17,20 +17,25 @@ import ida_struct
 import ida_xref
 import idaapi
 
-from ida_ida import inf_get_cc_size_i
-from ida_idp import ph_get_cnbits()
+from ida_idp import ph_get_cnbits
+from ida_ida import inf_get_app_bitness, inf_is_be
 from collections import namedtuple
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
 
+BITNESS = inf_get_app_bitness()
+INT_BYTES = BITNESS // ph_get_cnbits()
+ENDIANNESS = "big" if inf_is_be() else "little"
 # Flag that marks a string object as a string literal
 # 1 << (sizeof(int) * CHAR_BITS - 2) as per lib/nimbase.h
-NIM_STRLIT_FLAG = 1 << (inf_get_cc_size_i()  * ph_get_cnbits() - 2)
-if NIM_STRLIT_FLAG <= 0:
-    NIM_STRLIT_FLAG = 0x40000000 # This value is correct for almost all 32 and 64 bit compilers
+NIM_STRLIT_FLAG = 1 << (BITNESS - 2)
 
 PROGRAM_END = ida_segment.get_last_seg().end_ea
+
+def get_uint(ea):
+    bts = idaapi.get_bytes(ea, INT_BYTES, 0)
+    return int.from_bytes(bts, ENDIANNESS, signed=False)
 
 def iterate_segments():
     seg = ida_segment.get_first_seg()
@@ -59,20 +64,20 @@ def make_nim_strings():
 def _is_valid_C_str(s: bytes):
     return s[-1] == 0x00 and all([x in range(0x01,0x80) for x in s[:-1]])
 
-def is_nim_str_content(ea, ln):
-    reserved = ida_bytes.get_dword(ea)
-    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea+ln <= PROGRAM_END:
-        return _is_valid_C_str(ida_bytes.get_bytes(ea+4, ln+1))
+def is_nim_str_payload(ea, ln):
+    reserved = get_uint(ea)
+    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea+ln <= PROGRAM_END: # TODO only len is valid, right?
+        return _is_valid_C_str(ida_bytes.get_bytes(ea + INT_BYTES, ln+1))
     return False
 
 # lib/system/strs_v2.nim -> NimStringV2
 def is_nim_str(ea):
-    ln = ida_bytes.get_dword(ea)
+    ln = get_uint(ea)
     # Contiguous block string
     if ln > 0:
-        if is_nim_str_content(ea+4, ln):
+        if is_nim_str_payload(ea + INT_BYTES, ln):
             return (ST_NIMSTRING, ea, ln)
-        elif (addr := ida_xref.get_first_dref_from(ea+4)) != idaapi.BADADDR and is_nim_str_content(addr, ln):
+        elif (addr := ida_xref.get_first_dref_from(ea + INT_BYTES)) != idaapi.BADADDR and is_nim_str_payload(addr, ln):
             return (ST_NIMSTRING_PTR, ea, addr, ln)
     return False
 
@@ -107,7 +112,7 @@ def create_Nim_string_structs():
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
     if (nsc_struct_id := ida_struct.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
         NimStrPayload = [
-            StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
+            StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, INT_BYTES),
             StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
         ]
         nsc_struct = create_IDA_struct("NimStrPayload", NimStrPayload)
@@ -118,8 +123,8 @@ def create_Nim_string_structs():
     structs = {}
     if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
         structs["NimString"] = {
-            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
-            StructMember("content", ida_bytes.FF_STRUCT|ida_bytes.FF_DATA, nimstringcontent_opinfo, 4) # Flags for structs
+            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, INT_BYTES),
+            StructMember("content", ida_bytes.FF_STRUCT|ida_bytes.FF_DATA, nimstringcontent_opinfo, INT_BYTES) # Flags for structs
         }
     if ida_struct.get_struc_id("NimStringPtr") == idaapi.BADADDR:
         structs["NimStringPtr"] = {
