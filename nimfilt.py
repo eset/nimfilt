@@ -87,7 +87,10 @@ def _decode_module_name(module_name: str) -> str:
         "@m": "",
         "@@": "@"
     }
-    return _multi_replace(module_name, convs)
+    dec = _multi_replace(module_name, convs)
+    if dec.endswith(".nim"):
+        dec = dec[:-len(".nim")]
+    return dec
 
 # adapted from clean_function_name in https://github.com/SentineLabs/AlphaGolang/blob/main/2.function_discovery_and_renaming.py
 def _clean_name_ida(name: str) -> str:
@@ -214,7 +217,6 @@ class NimInitName(NimName):
         pkgname = m.group(1)
         if m.group(2) == "at":
             pkgname = _decode_specialchars(pkgname)
-        # TODO: Differentiate file and module name if they're not the same
         self.pkgname = _decode_module_name(pkgname)
         self.suffix = None
         self.ida_suffix = m.group(5)
