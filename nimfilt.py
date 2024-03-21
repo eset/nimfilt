@@ -1,4 +1,10 @@
 #!/bin/env python3
+# -*- encoding: utf8 -*-
+#
+# Copyright (c) 2024 ESET
+# Author: Alexandre Côté Cyr <alexandre.cote@eset.com>
+# See LICENSE file for redistribution.
+
 import sys
 import string
 import re

@@ -1,3 +1,9 @@
+# -*- encoding: utf8 -*-
+#
+# Copyright (c) 2024 ESET
+# Author: Alexandre Côté Cyr <alexandre.cote@eset.com>
+# See LICENSE file for redistribution.
+
 import nimfilt
 import posixpath
 
