@@ -22,20 +22,31 @@ from ida_idp import ph_get_cnbits
 from ida_ida import inf_get_app_bitness, inf_is_be
 from collections import namedtuple
 
+AUTO_RUN = False
+
 PLUGIN_NAME = "Nimfilt"
 VERSION = "1.0.0"
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
 
-BITNESS = inf_get_app_bitness()
-INT_BYTES = BITNESS // ph_get_cnbits()
-ENDIANNESS = "big" if inf_is_be() else "little"
+# These global variables can only be calculated after IDA has loaded the program
+BITNESS = None
+INT_BYTES = None
+ENDIANNESS = None
 # Flag that marks a string object as a string literal
-# 1 << (sizeof(int) * CHAR_BITS - 2) as per lib/nimbase.h
-NIM_STRLIT_FLAG = 1 << (BITNESS - 2)
+NIM_STRLIT_FLAG = None
 
-PROGRAM_END = ida_segment.get_last_seg().end_ea
+PROGRAM_END = None
+
+def init_globals():
+    global PROGRAM_END, BITNESS, INT_BYTES, ENDIANNESS, NIM_STRLIT_FLAG
+    PROGRAM_END = ida_segment.get_last_seg().end_ea
+    BITNESS = inf_get_app_bitness()
+    INT_BYTES = BITNESS // ph_get_cnbits()
+    ENDIANNESS = "big" if inf_is_be() else "little"
+    # 1 << (sizeof(int) * CHAR_BITS - 2) as per lib/nimbase.h
+    NIM_STRLIT_FLAG = 1 << (BITNESS - 2)
 
 def get_uint(ea):
     bts = idaapi.get_bytes(ea, INT_BYTES, 0)
@@ -43,7 +54,7 @@ def get_uint(ea):
 
 class Nimfilt_plugin(idaapi.plugin_t):
     comment = ""
-    flags = idaapi.PLUGIN_MOD
+    flags = idaapi.PLUGIN_MOD | idaapi.PLUGIN_FIX
     help = "Helps with reversing Nim compiled executables"
     wanted_hotkey = ""
     wanted_name = PLUGIN_NAME
@@ -52,13 +63,10 @@ class Nimfilt_plugin(idaapi.plugin_t):
         super(Nimfilt_plugin, self)
 
     def init(self):
-        global PROGRAM_END
-        PROGRAM_END = ida_segment.get_last_seg().end_ea
-
-        if is_nim_idb():
+        if AUTO_RUN and is_nim_idb():
             print("IDB identified as Nim.")
             print("Running Nimfilt.")
-            main()
+            self.run()
         else:
             print("IDB could not be confirmed as Nim. You can still run the plugin manually")
         return idaapi.PLUGIN_KEEP
@@ -278,6 +286,7 @@ def is_nim_idb():
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # Rename functions and move them to subdirectories based on the package path/name
 def main():
+    init_globals()
     func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
     for ea, nname in parse_nim_functions():
         name = rename(ea, nname)
@@ -288,6 +297,7 @@ def main():
     make_nim_strings()
 
 if __name__ == "__main__":
+    ida_auto.auto_wait()
     main()
 
 def PLUGIN_ENTRY():
