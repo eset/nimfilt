@@ -5,7 +5,6 @@
 # Author: Alexandre Côté Cyr <alexandre.cote@eset.com>
 # See LICENSE file for redistribution.
 
-import sys
 import string
 import re
 import ntpath
@@ -236,9 +235,18 @@ def NimNameCreator(namestr: str) -> NimName:
     raise ValueError("Invalid Nim name \"{}\"".format(namestr))
 
 if __name__ == "__main__":
-    name = sys.argv[1]
-    try:
-        n = NimNameCreator(name)
-        print(n)
-    except ValueError:
-        print(name)
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(
+        prog="nimfilt",
+        description="Demangle Nim module and method names",
+        epilog="Demangled names are displayed to STDOUT. If a name cannot be demangled, it is output to STDOUT as is.")
+    parser.add_argument("mangled_names", type=str, nargs="+", metavar="mangled_name",
+                      help="Symbol name mangled by Nim")
+    args = parser.parse_args()
+    for name in args.mangled_names:
+        try:
+            n = NimNameCreator(name)
+            print(n)
+        except ValueError:
+            print(name)
