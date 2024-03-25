@@ -1,22 +1,49 @@
 # Nimfilt
 
-This is a module to help with analyzing Nim executables. The main `nimfilt.py` script can be run directly to demangle Nim function and module names (à la `c++filt`, hence the name).
+Nimfilt is a collection of modules and scripts to help with analyzing [Nim](https://github.com/nim-lang/Nim/) binaries. It started out as a CLI demangling tool inspired by `c++filt`. It evolved into a larger set of tools for analyzing Nim, but the original name stuck.
 
-Also provided is `nimimfilt_ida.py`, an IDApython script.
+ - `nimfilt.py`: a Python module that implements demangling for Nim. It can also be run as basic CLI tool.
+ - `id_nim_binary.yar`: a set of YARA rules to identify Nim ELF and PE binaries.
+ - `nimimfilt_ida.py`: Nimfilt for IDA, an IDApython script to help reverse-engineers handle Nim binaries.
+
 
 ## Context
 
-Nim uses its own name mangling scheme distinct from C++'s. As far as I can tell, this scheme isn't documented so I relied on the source code of the [Nim compiler](https://github.com/nim-lang/Nim). Most of this name mangling in implemented in `compiler/msgs.nim` and `compiler/ccgtypes.nim`.
+Nim uses its own name mangling scheme distinct from C++'s. This scheme isn't documented so I relied on the source code of the [Nim compiler](https://github.com/nim-lang/Nim). Most of this name mangling in implemented in `compiler/msgs.nim` and `compiler/ccgtypes.nim`.
 
-## IDA Script
 
-Copy `nimfilt.py` to your IDAPython directory and run `nimfilt_ida.py` as a script file.
+## Nimfilt for IDA
+
+The IDAPython script can be run as a one-off or installed as a plugin.
+
+If running as a script, simply launch it from the Nimfilt project directory. It is recommended to do so after auto-analysis has completed and you've loaded any additional FLIRT signatures.
+
+### Plugin setup using [Sark](https://github.com/tmr232/Sark)'s plugin loader
+
+Add `<nimfilt_project_dir>/nimfilt_ida.py` to your your `plugins.list` as per their instruction on [installing plugins](https://sark.readthedocs.io/en/latest/plugins/installation.html).
+
+### Manual plugin setup
+
+1. Copy `nimfilt.py` to a directory that is included in your IDAPython's `PYTHONPATH` (commonly `<IDA_install_dir>/python/` or `%APPDATA%/Hex-Rays/IDA Pro/python/3/`).
+2. Copy `nimfilt_ida.py` to your IDAPython plugin directory (usually `<IDA_install_dir>/plugins/`)
+
+### Usage
+
+*Note: The current version of Nimfilt for IDA only supports one command which runs all analyses. *
+
+Navigate to Edit -> Plugins -> Nimfilt and click on it.
+
+
+## Features
 
 Current features include:
 
- - Demangling Nim function and package names
- - Organizing functions into directories by package
- - Identifying and properly typing Nim strings
+ - Identifying if a loaded file is a Nim binary.
+ - Demangling Nim function and package names.
+ - Demangling Nim package init function names.
+ - Organizing functions into directories by package.
+ - Identifying, typing and renaming Nim strings.
+
 
 ## TODO/Known issues
 
@@ -25,3 +52,10 @@ Current features include:
  - [ ] IDA Script: Format `Init` function' module paths to match regular function format
  - [ ] IDA Script: Group packages under root-level directories: Nimble, STD and local/main
  - [ ] IDA Script: Use simplified pkg name when renaming functions
+
+
+## Similar and related work
+
+[AlphaGolang](https://github.com/SentineLabs/AlphaGolang) is a project that fulfills a similar role for Go binaries. While none of AlphaGolang's code was used directly in Nimfilt, it served as a general inspiration and was useful in understanding IDA's folder API.
+
+[Nim-IDA-FLIRT-Generator](https://github.com/Cisco-Talos/Nim-IDA-FLIRT-Generator) is another project that helps with reverse-engineering Nim binaries. It does so by greatly simplifying the process of creating IDA FLIRT signatures for Nim. It nicely complements Nimfilt for binaries that lack symbols: First generate then apply your FLIRT signatures, then run Nimfilt for the best results.
