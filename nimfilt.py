@@ -7,7 +7,6 @@
 
 import string
 import re
-import ntpath
 from binascii import unhexlify
 from functools import reduce
 
@@ -45,9 +44,9 @@ def _multi_replace(stri: str, conversions: dict) -> str:
 def __decode_specialchar(substring):
     try:
         fnd_key = list(filter(lambda k: substring.startswith(k), SPECIAL_CHAR_CONVS.keys()))[0]
-        return SPECIAL_CHAR_CONVS[fnd_key],len(fnd_key)
+        return SPECIAL_CHAR_CONVS[fnd_key], len(fnd_key)
     except IndexError:
-         return substring[0], 1
+        return substring[0], 1
 
 # Return string with replacements
 def _decode_specialchars(stri: str) -> str:
@@ -107,37 +106,38 @@ def demangle_module(name: str) -> str:
             if name[i] == "Z":
                 plain = plain + "/"
             elif name[i] == "O":
-                plain = plain+"."
+                plain = plain + "."
             else:
                 raise ValueError("Invalid special character '{}' in module name".format(name[i]))
         elif name[i] in string.ascii_lowercase:
             plain = plain + name[i]
-        elif name[i] in string.digits and name[i+1] in string.digits:
-            plain = plain + chr(int(name[i:i+2]))
-            i+=1
+        elif name[i] in string.digits and name[i + 1] in string.digits:
+            plain = plain + chr(int(name[i:i + 2]))
+            i += 1
         else:
             plain = plain + name[i]
-        i+=1
+        i += 1
     return plain
 
 # Parse hex encoded substrings strings
-def __Xsubstring(substring):
+# Returns the parsed value and length and hown many characters were parsed
+def __Xsubstring(substring: str) -> (str, int):
     if len(substring) < 3:
         return "X", 1
     elif all(map(lambda c: c in string.hexdigits.upper(), substring[1:3])):
-        return unhexlify(substring[1:3]).decode("utf-8"),3
+        return unhexlify(substring[1:3]).decode("utf-8"), 3
     else:
         return "X", 1
 
 # See https://github.com/nim-lang compiler/ccgutils.nim:mangle
 def demangle_function(name: str) -> str:
     plain = ""
-    if name[-1] != "_": #underscore is added at the end of the name if any special encoding had to be performed
+    if name[-1] != "_":  # underscore is added at the end of the name if any special encoding had to be performed
         if name[0] == "X":
             name = name[1:]
         return name
 
-    name = name[:-1] # remove trailing _
+    name = name[:-1]  # remove trailing _
     i = 0
     if name[0] == "X" and name[1] in string.digits and name[2] not in string.hexdigits.upper():
         plain = plain + name[1]
@@ -145,12 +145,12 @@ def demangle_function(name: str) -> str:
 
     while i < len(name):
         if name[i] == "X":
-            v,l = __Xsubstring(name[i:i+3])
-            i += l
+            v, ln = __Xsubstring(name[i:i + 3])
+            i += ln
             plain = plain + v
         elif name[i] in string.ascii_lowercase:
-            v,l = __decode_specialchar(name[i:])
-            i += l
+            v, ln = __decode_specialchar(name[i:])
+            i += ln
             plain = plain + v
         else:
             plain = plain + name[i]
@@ -234,6 +234,7 @@ def NimNameCreator(namestr: str) -> NimName:
             pass
     raise ValueError("Invalid Nim name \"{}\"".format(namestr))
 
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         description="Demangle Nim module and method names",
         epilog="Demangled names are displayed to STDOUT. If a name cannot be demangled, it is output to STDOUT as is.")
     parser.add_argument("mangled_names", type=str, nargs="+", metavar="mangled_name",
-                      help="Symbol name mangled by Nim")
+                        help="Symbol name mangled by Nim")
     args = parser.parse_args()
     for name in args.mangled_names:
         try:

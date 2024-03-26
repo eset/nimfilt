@@ -18,6 +18,7 @@ import ida_segment
 import ida_struct
 import ida_xref
 import idaapi
+import idautils
 
 from ida_idp import ph_get_cnbits
 from ida_ida import inf_get_app_bitness, inf_is_be
@@ -106,12 +107,12 @@ def make_nim_strings():
 # String is NUL terminated and contains only valid ascii non-NUL characters
 # TODO: check encodings
 def _is_valid_C_str(s: bytes):
-    return s[-1] == 0x00 and all([x in range(0x01,0x80) for x in s[:-1]])
+    return s[-1] == 0x00 and all([x in range(0x01, 0x80) for x in s[:-1]])
 
 def is_nim_str_payload(ea, ln):
     reserved = get_uint(ea)
-    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea+ln <= PROGRAM_END: # TODO only len is valid, right?
-        return _is_valid_C_str(ida_bytes.get_bytes(ea + INT_BYTES, ln+1))
+    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea + ln <= PROGRAM_END:  # TODO only len is valid, right?
+        return _is_valid_C_str(ida_bytes.get_bytes(ea + INT_BYTES, ln + 1))
     return False
 
 # lib/system/strs_v2.nim -> NimStringV2
@@ -156,7 +157,7 @@ def create_Nim_string_structs():
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
     if (nsc_struct_id := ida_struct.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
         NimStrPayload = [
-            StructMember("reserved", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, INT_BYTES),
+            StructMember("reserved", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, INT_BYTES),
             StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
         ]
         nsc_struct = create_IDA_struct("NimStrPayload", NimStrPayload)
@@ -167,13 +168,13 @@ def create_Nim_string_structs():
     structs = {}
     if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
         structs["NimString"] = {
-            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, INT_BYTES),
-            StructMember("content", ida_bytes.FF_STRUCT|ida_bytes.FF_DATA, nimstringcontent_opinfo, INT_BYTES) # Flags for structs
+            StructMember("length", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, INT_BYTES),
+            StructMember("content", ida_bytes.FF_STRUCT | ida_bytes.FF_DATA, nimstringcontent_opinfo, INT_BYTES)  # Flags for structs
         }
     if ida_struct.get_struc_id("NimStringPtr") == idaapi.BADADDR:
         structs["NimStringPtr"] = {
-            StructMember("length", ida_bytes.FF_DWORD|ida_bytes.FF_DATA, None, 4),
-            StructMember("content", ida_bytes.FF_DWORD|ida_bytes.FF_0OFF|ida_bytes.FF_1OFF|ida_bytes.FF_DATA, nimstringcontent_opinfo, 4) # Flags for 32 bit pointers
+            StructMember("length", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, 4),
+            StructMember("content", ida_bytes.FF_DWORD | ida_bytes.FF_0OFF | ida_bytes.FF_1OFF | ida_bytes.FF_DATA, nimstringcontent_opinfo, 4)  # Flags for 32 bit pointers
         }
     for name, members in structs.items():
         create_IDA_struct(name, members)
@@ -190,8 +191,8 @@ def apply_Nim_string_struct(start_addr, length):
     struct_id = ida_struct.get_struc_id("NimString")
     size = ida_struct.get_struc_size(struct_id) + length
     ida_bytes.create_struct(start_addr, size, struct_id)
-    content = ida_bytes.get_bytes(start_addr+8, length)
-    ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
+    content = ida_bytes.get_bytes(start_addr + 8, length)
+    ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     return size
 
 def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
@@ -200,11 +201,11 @@ def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
     ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id)
     size = ida_struct.get_struc_size(content_struct_id) + length
     ida_bytes.create_struct(content_addr, size, content_struct_id)
-    content = ida_bytes.get_bytes(content_addr+4, length)
+    content = ida_bytes.get_bytes(content_addr + 4, length)
     name = str_to_name(content)
-    ida_name.set_name(content_addr, name, ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
-    name = ida_name.get_name(content_addr) # Get final name in case IDA auto-added a suffix
-    ida_name.set_name(start_addr, "ptr_{:s}".format(name), ida_name.SN_AUTO|ida_name.SN_IDBENC|ida_name.SN_PUBLIC|ida_name.SN_FORCE)
+    ida_name.set_name(content_addr, name, ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
+    name = ida_name.get_name(content_addr)  # Get final name in case IDA auto-added a suffix
+    ida_name.set_name(start_addr, "ptr_{:s}".format(name), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     return ida_struct.get_struc_size(ptr_struct_id)
 
 # Returns a name like IDA's default names for string using s as a prefix instead of a
@@ -281,7 +282,7 @@ def is_nim_idb():
     # Based on our tests, these strings are present in all Nim binaries even if they are stripped. However, it would be trivial for a threat actor to remove them
     if ida_search.find_text(0, 0, 0, "fatal.nim", ida_search.SEARCH_DOWN) != idaapi.BADADDR and ida_search.find_text(0, 0, 0, "sysFatal", ida_search.SEARCH_DOWN | ida_search.SEARCH_CASE) != idaapi.BADADDR:
         return True
-    ## Other strings
+    # Other strings
     ERR_MSG = ["@value out of range", "@division by zero", "@over- or underflow", "@index out of bounds"]
     if any(filter(_nim_func_filter, idautils.Functions())):
         return True
