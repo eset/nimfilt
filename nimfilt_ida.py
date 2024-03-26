@@ -13,7 +13,6 @@ import ida_dirtree
 import ida_funcs
 import ida_nalt
 import ida_name
-import ida_search
 import ida_segment
 import ida_struct
 import ida_xref
@@ -55,8 +54,12 @@ def get_uint(ea):
     bts = idaapi.get_bytes(ea, INT_BYTES, 0)
     return int.from_bytes(bts, ENDIANNESS, signed=False)
 
-def find_text(string):
-    return ida_search.find_text(0, 0, 0, string, ida_search.SEARCH_DOWN)
+# bin_search is significantly faster than ida_search.find_text
+# Unlike find_text, it also matches data that isn't typed as a string
+def find_text(string: str):
+    pattern = ida_bytes.compiled_binpat_vec_t()
+    ida_bytes.parse_binpat_str(pattern, 0, '"{}"'.format(string), 0, ida_nalt.STRENC_DEFAULT)  # Strings must be inside double quotes
+    return ida_bytes.bin_search3(0, PROGRAM_END, pattern, idaapi.BIN_SEARCH_FORWARD)
 
 class Nimfilt_plugin(idaapi.plugin_t):
     comment = ""
