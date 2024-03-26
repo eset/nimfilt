@@ -13,6 +13,7 @@ import ida_dirtree
 import ida_funcs
 import ida_nalt
 import ida_name
+import ida_search
 import ida_segment
 import ida_struct
 import ida_xref
@@ -45,7 +46,8 @@ def init_globals():
     BITNESS = inf_get_app_bitness()
     INT_BYTES = BITNESS // ph_get_cnbits()
     ENDIANNESS = "big" if inf_is_be() else "little"
-    # 1 << (sizeof(int) * CHAR_BITS - 2) as per lib/nimbase.h
+    # lib/nimbase.h: 1 << (sizeof(int) * CHAR_BITS - 2)
+    # Nim's int type is 64bit on 64 bit architectures
     NIM_STRLIT_FLAG = 1 << (BITNESS - 2)
 
 def get_uint(ea):
@@ -59,17 +61,19 @@ class Nimfilt_plugin(idaapi.plugin_t):
     wanted_hotkey = ""
     wanted_name = PLUGIN_NAME
 
-    def __init__(self):
-        super(Nimfilt_plugin, self)
-
     def init(self):
-        if AUTO_RUN and is_nim_idb():
+        idaapi.notify_when(idaapi.NW_OPENIDB, self._idb_loaded_handler)
+        return idaapi.PLUGIN_KEEP
+
+    # Check if the database is Nim and run if AUTO_RUN is on
+    def _idb_loaded_handler(self, _, is_old_database):
+        if is_nim_idb():
             print("IDB identified as Nim.")
-            print("Running Nimfilt.")
-            self.run()
+            if not is_old_database and AUTO_RUN:
+                print("Running Nimfilt.")
+                self.run()
         else:
             print("IDB could not be confirmed as Nim. You can still run the plugin manually")
-        return idaapi.PLUGIN_KEEP
 
     def run(self, arg):
         main()
@@ -286,6 +290,7 @@ def is_nim_idb():
 # TODO: create separate root level directories for Stdlib, project and nimble packages
 # Rename functions and move them to subdirectories based on the package path/name
 def main():
+    ida_auto.auto_wait()
     init_globals()
     func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
     for ea, nname in parse_nim_functions():
@@ -297,9 +302,7 @@ def main():
     make_nim_strings()
 
 if __name__ == "__main__":
-    ida_auto.auto_wait()
     main()
 
 def PLUGIN_ENTRY():
-    ida_auto.auto_wait()
     return Nimfilt_plugin()

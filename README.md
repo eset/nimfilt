@@ -33,6 +33,8 @@ Add `<nimfilt_project_dir>/nimfilt_ida.py` to your your `plugins.list` as per th
 
 Navigate to Edit -> Plugins -> Nimfilt and click on it.
 
+You can set Nimfilt to automatically execute when a loaded file is recognized as a Nim binary. To do so, set the `AUTO_RUN` global variable to `True` in `nimfilt_ida.py`
+
 
 ## Features
 
