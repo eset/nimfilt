@@ -55,6 +55,9 @@ def get_uint(ea):
     bts = idaapi.get_bytes(ea, INT_BYTES, 0)
     return int.from_bytes(bts, ENDIANNESS, signed=False)
 
+def find_text(string):
+    return ida_search.find_text(0, 0, 0, string, ida_search.SEARCH_DOWN)
+
 class Nimfilt_plugin(idaapi.plugin_t):
     comment = ""
     flags = idaapi.PLUGIN_MOD | idaapi.PLUGIN_FIX
@@ -111,7 +114,7 @@ def _is_valid_C_str(s: bytes):
 
 def is_nim_str_payload(ea, ln):
     reserved = get_uint(ea)
-    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea + ln <= PROGRAM_END:  # TODO only len is valid, right?
+    if reserved ^ NIM_STRLIT_FLAG in [0, ln] and ea + ln <= PROGRAM_END:
         return _is_valid_C_str(ida_bytes.get_bytes(ea + INT_BYTES, ln + 1))
     return False
 
@@ -149,7 +152,7 @@ Strings, lib/system.nim
     }
 
 For string literals, the value of cap/reserved is ORed with NIM_STRLIT_FLAG
-reserved appears to be either 0 or cap
+reserved appears to be the same as cap
 """
 StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
@@ -280,12 +283,20 @@ def _nim_func_filter(ea):
 # Use simple heuristics to see if the currently open program is Nim
 def is_nim_idb():
     # Based on our tests, these strings are present in all Nim binaries even if they are stripped. However, it would be trivial for a threat actor to remove them
-    if ida_search.find_text(0, 0, 0, "fatal.nim", ida_search.SEARCH_DOWN) != idaapi.BADADDR and ida_search.find_text(0, 0, 0, "sysFatal", ida_search.SEARCH_DOWN | ida_search.SEARCH_CASE) != idaapi.BADADDR:
+    if find_text("fatal.nim") != idaapi.BADADDR and find_text("sysFatal") != idaapi.BADADDR:
         return True
-    # Other strings
-    ERR_MSG = ["@value out of range", "@division by zero", "@over- or underflow", "@index out of bounds"]
+    # Function names
     if any(filter(_nim_func_filter, idautils.Functions())):
         return True
+    # Other strings
+    # Must contain at least 2 of those
+    ERR_MSG = ["@value out of range", "@division by zero", "@over- or underflow", "@index out of bounds"]
+    matches = 0
+    for s in ERR_MSG:
+        if find_text(s) != idaapi.BADDADDR:
+            matches += 1
+            if matches >= 2:
+                return True
     return False
 
 # TODO: create separate root level directories for Stdlib, project and nimble packages
