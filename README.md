@@ -9,7 +9,9 @@ Nimfilt is a collection of modules and scripts to help with analyzing [Nim](http
 
 ## Context
 
-Nim uses its own name mangling scheme distinct from C++'s. This scheme isn't documented so I relied on the source code of the [Nim compiler](https://github.com/nim-lang/Nim). Most of this name mangling in implemented in `compiler/msgs.nim` and `compiler/ccgtypes.nim`.
+Nim is transpiled to another language (usually C/C++) before being compiled to a native executable. It also doesn't include a large runtime. However, the process still leaves some Nim-specific artefacts and specificites in in the produced binary.
+
+For one, method and module names are mangled using, Nim's own name scheme which is distinct from C++'s. This scheme isn't documented so I relied on the source code of the [Nim compiler](https://github.com/nim-lang/Nim). Most of this name mangling in implemented in `compiler/msgs.nim` and `compiler/ccgtypes.nim`.
 
 
 ## Nimfilt for IDA
