@@ -264,6 +264,8 @@ def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
 
     new_children = []
     for child_path in children:
+        if child_path.endswith("/.."):  # Avoid infinite recursion
+            continue
         if dirtree.isdir(child_path):
             child_path = merge_dir(dirtree, child_path)
         else:
@@ -310,8 +312,8 @@ def main():
     func_dirtree = ida_dirtree.get_std_dirtree(ida_dirtree.DIRTREE_FUNCS)
     for ea, nname in parse_nim_functions():
         name = rename(ea, nname)
-        func_dirtree.mkdir(nname.pkgname)
-        func_dirtree.rename(name, "{}/{}".format(nname.pkgname, name))
+        func_dirtree.mkdir(nname.ida_dirname)
+        func_dirtree.rename(name, "{}/{}".format(nname.ida_dirname, name))
     merge_dir(func_dirtree)
     create_Nim_string_structs()
     make_nim_strings()

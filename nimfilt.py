@@ -90,7 +90,6 @@ def _decode_module_name(module_name: str) -> str:
         dec = dec[:-len(".nim")]
     return dec
 
-# adapted from clean_function_name in https://github.com/SentineLabs/AlphaGolang/blob/main/2.function_discovery_and_renaming.py
 def _clean_name_ida(name: str) -> str:
     STRIP_CHARS = r'[()\[\]{} "]'
     REPLACE_CHARS = r'[,;]'
@@ -173,7 +172,12 @@ class NimName():
 
     @property
     def _clean_pkgname(self):
+        re.sub(r"(\.\.\/)+", "../", self.pkgname)
         return re.sub(r"[/\\\-.]", "_", _clean_name_ida(self.pkgname))
+
+    @property
+    def ida_dirname(self):
+        return re.sub(r"(\.\./)+", "_/", self.pkgname)
 
     @property
     def _clean_fnname(self):
