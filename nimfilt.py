@@ -161,7 +161,7 @@ def demangle_function(name: str) -> str:
 class NimName():
     def __init__(self, namestr):
         # <Function name>__<Package Name>_u<numeric ID>_<numeric IDA suffix>.<compiler suffix>@<C++ mangled arguments>
-        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u?[0-9]+)(_[0-9]+)?(\.[a-z]+\.[0-9]+)?(@[0-9]+)?', namestr)
+        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__(.*)(_u[0-9]+)(_[0-9]+)?(\.[a-z]+\.[0-9]+)?(@[0-9]+)?', namestr)
         if m is None or len(m.group(1)) <= 1:
             raise ValueError("Invalid Nim function name \"{}\"".format(namestr))
         self.fnname = demangle_function(m.group(1))
