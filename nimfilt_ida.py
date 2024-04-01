@@ -59,7 +59,7 @@ def get_uint(ea):
 def find_text(string: str):
     pattern = ida_bytes.compiled_binpat_vec_t()
     ida_bytes.parse_binpat_str(pattern, 0, '"{}"'.format(string), 0, ida_nalt.STRENC_DEFAULT)  # Strings must be inside double quotes
-    return ida_bytes.bin_search3(0, PROGRAM_END, pattern, idaapi.BIN_SEARCH_FORWARD)
+    return ida_bytes.bin_search3(0, ida_segment.get_last_seg().end_ea, pattern, idaapi.BIN_SEARCH_FORWARD)
 
 class Nimfilt_plugin(idaapi.plugin_t):
     comment = ""
@@ -227,17 +227,14 @@ def str_to_name(string):
 
 # Parse all functions in the current IDB for ones that have nim mangled names
 def parse_nim_functions():
-    seg = ida_segment.get_first_seg()
-    func = ida_funcs.get_next_func(seg.start_ea - 1)
-    while func is not None:
+    for i in range(ida_funcs.get_func_qty()):
+        func = ida_funcs.getn_func(i)
         name = ida_funcs.get_func_name(func.start_ea)
-
         try:
             niname = nimfilt.NimNameCreator(name)
             yield func.start_ea, niname
         except ValueError:
             pass
-        func = ida_funcs.get_next_func(func.start_ea)
 
 # Rename function. Use mangler generated suffix if there is a duplicate
 def rename(ea, nname: nimfilt.NimName):
