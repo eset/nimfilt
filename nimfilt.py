@@ -110,7 +110,7 @@ def demangle_module(name: str) -> str:
                 raise ValueError("Invalid special character '{}' in module name".format(name[i]))
         elif name[i] in string.ascii_lowercase:
             plain = plain + name[i]
-        elif name[i] in string.digits and len(name) < i + 1 and name[i + 1] in string.digits:
+        elif name[i] in string.digits and len(name) > i + 1 and name[i + 1] in string.digits:
             plain = plain + chr(int(name[i:i + 2]))
             i += 1
         else:
