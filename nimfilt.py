@@ -238,8 +238,7 @@ def NimNameCreator(namestr: str) -> NimName:
             pass
     raise ValueError("Invalid Nim name \"{}\"".format(namestr))
 
-
-if __name__ == "__main__":
+def main():
     from argparse import ArgumentParser
 
     parser = ArgumentParser(
@@ -255,3 +254,6 @@ if __name__ == "__main__":
             print(n)
         except ValueError:
             print(name)
+
+if __name__ == "__main__":
+    main()
