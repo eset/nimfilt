@@ -240,15 +240,23 @@ def NimNameCreator(namestr: str) -> NimName:
 
 def main():
     from argparse import ArgumentParser
+    import sys
 
     parser = ArgumentParser(
         prog="nimfilt",
         description="Demangle Nim module and method names",
         epilog="Demangled names are displayed to STDOUT. If a name cannot be demangled, it is output to STDOUT as is.")
-    parser.add_argument("mangled_names", type=str, nargs="+", metavar="mangled_name",
+    parser.add_argument("mangled_names", type=str, nargs="*", metavar="mangled_name",
                         help="Symbol name mangled by Nim")
     args = parser.parse_args()
-    for name in args.mangled_names:
+    if len(args.mangled_names) > 0:
+        names = args.mangled_names
+    elif not sys.stdin.isatty():
+        names = map(str.rstrip, sys.stdin)
+    else:
+        parser.print_help()
+        names = []
+    for name in names:
         try:
             n = NimNameCreator(name)
             print(n)
