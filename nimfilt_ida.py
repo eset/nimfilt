@@ -159,11 +159,12 @@ reserved appears to be the same as cap
 """
 StructMember = namedtuple("StructMember", "name, flag, member_type, size")
 def create_Nim_string_structs():
+    INT_TYPES = {1: ida_bytes.FF_BYTE, 2: ida_bytes.FF_WORD, 4: ida_bytes.FF_DWORD, 8: ida_bytes.FF_QWORD, 16: ida_bytes.FF_OWORD}
     str_opinfo = ida_nalt.opinfo_t()
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
     if (nsc_struct_id := ida_struct.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
         NimStrPayload = [
-            StructMember("reserved", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, INT_BYTES),
+            StructMember("reserved", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, INT_BYTES),
             StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
         ]
         nsc_struct = create_IDA_struct("NimStrPayload", NimStrPayload)
@@ -173,15 +174,15 @@ def create_Nim_string_structs():
     nimstringcontent_opinfo.tid = nsc_struct_id
     structs = {}
     if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
-        structs["NimString"] = {
-            StructMember("length", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, INT_BYTES),
+        structs["NimString"] = [
+            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, INT_BYTES),
             StructMember("content", ida_bytes.FF_STRUCT | ida_bytes.FF_DATA, nimstringcontent_opinfo, INT_BYTES)  # Flags for structs
-        }
+        ]
     if ida_struct.get_struc_id("NimStringPtr") == idaapi.BADADDR:
-        structs["NimStringPtr"] = {
-            StructMember("length", ida_bytes.FF_DWORD | ida_bytes.FF_DATA, None, 4),
-            StructMember("content", ida_bytes.FF_DWORD | ida_bytes.FF_0OFF | ida_bytes.FF_1OFF | ida_bytes.FF_DATA, nimstringcontent_opinfo, 4)  # Flags for 32 bit pointers
-        }
+        structs["NimStringPtr"] = [
+            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, 4),
+            StructMember("content", INT_TYPES[INT_BYTES] | ida_bytes.FF_0OFF | ida_bytes.FF_1OFF | ida_bytes.FF_DATA, nimstringcontent_opinfo, 4)  # Flags for 32 bit pointers
+        ]
     for name, members in structs.items():
         create_IDA_struct(name, members)
 
@@ -196,18 +197,18 @@ def create_IDA_struct(name: str, members: list):
 def apply_Nim_string_struct(start_addr, length):
     struct_id = ida_struct.get_struc_id("NimString")
     size = ida_struct.get_struc_size(struct_id) + length
-    ida_bytes.create_struct(start_addr, size, struct_id)
-    content = ida_bytes.get_bytes(start_addr + 8, length)
+    ida_bytes.create_struct(start_addr, size, struct_id, True)
+    content = ida_bytes.get_bytes(start_addr + 2 * INT_BYTES, length)
     ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     return size
 
 def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
     ptr_struct_id = ida_struct.get_struc_id("NimStringPtr")
     content_struct_id = ida_struct.get_struc_id("NimStrPayload")
-    ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id)
+    ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id, True)
     size = ida_struct.get_struc_size(content_struct_id) + length
-    ida_bytes.create_struct(content_addr, size, content_struct_id)
-    content = ida_bytes.get_bytes(content_addr + 4, length)
+    ida_bytes.create_struct(content_addr, size, content_struct_id, True)
+    content = ida_bytes.get_bytes(content_addr + INT_BYTES, length)
     name = str_to_name(content)
     ida_name.set_name(content_addr, name, ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     name = ida_name.get_name(content_addr)  # Get final name in case IDA auto-added a suffix
