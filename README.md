@@ -38,6 +38,11 @@ Navigate to Edit -> Plugins -> Nimfilt and click on it.
 You can set Nimfilt to automatically execute when a loaded file is recognized as a Nim binary. To do so, set the `AUTO_RUN` global variable to `True` in `nimfilt_ida.py`
 
 
+## Running tests
+
+Nimfilt uses the [unittest](https://docs.python.org/3/library/unittest.html) package from the Python standard library for unit testing. You can run the test suite using the following command: `python -m unittest test/*.py`.
+
+
 ## Features
 
 Current features include:
