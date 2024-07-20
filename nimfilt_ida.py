@@ -279,9 +279,8 @@ def merge_dir(dirtree: ida_dirtree.dirtree_t, path=""):
 
 # Returns True if the function at ea has a name that matches known Nim functions
 def _nim_func_filter(ea):
-    NIM_FUNC_NAMES = ["NimMain", "NimMainInner", "NimMainModule"]
     name = ida_funcs.get_name(ea)
-    return any(filter(lambda known_name: known_name in name, NIM_FUNC_NAMES))
+    return any(filter(lambda known_name: known_name in name, nimfilt.NIM_FUNC_NAMES))
 
 # Use simple heuristics to see if the currently open program is Nim
 def is_nim_idb():

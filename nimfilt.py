@@ -11,6 +11,7 @@ from binascii import unhexlify
 from functools import reduce
 
 NIM_STD = ["system", "core", "pure", "js", "impure", "std", "windows", "posix", "wrappers"]
+NIM_FUNC_NAMES = ["NimMain", "NimMainInner", "NimMainModule"]
 SUF_NONE = 0
 SUF_NIM = 1
 SUF_IDA = 2
@@ -37,67 +38,128 @@ SPECIAL_CHAR_CONVS = {
     "bar": "|"
 }
 
-def _multi_replace(stri: str, conversions: dict) -> str:
+def _multi_replace(stri, conversions):
+    """
+    Replaces multiple characters in a string.
+
+    :type stri: str
+    :type conversion: dict
+
+    :rtype: str
+    """
+
     return reduce(lambda s, conv: s.replace(conv[0], conv[1]), conversions.items(), stri)
 
-# return first match + length of key
 def __decode_specialchar(substring):
+    """
+    Finds first match of special character in substring.
+
+    :type substring: str
+
+    :return: First match and lenght of key
+    :rtype: Tuple[str, int]
+    """
+
     try:
         fnd_key = list(filter(lambda k: substring.startswith(k), SPECIAL_CHAR_CONVS.keys()))[0]
         return SPECIAL_CHAR_CONVS[fnd_key], len(fnd_key)
     except IndexError:
         return substring[0], 1
 
-# Return string with replacements
-def _decode_specialchars(stri: str) -> str:
+def _decode_specialchars(stri):
+    """
+    Decodes special characters in string.
+
+    :type stri: str
+
+    :rtype: str
+    """
+
     return _multi_replace(stri, SPECIAL_CHAR_CONVS)
 
-def _encode_specialchars(stri: str) -> str:
-    convs = {
-        "$": "DOLLAR",
-        "%": "PERCENT",
-        "&": "AND",
-        "^": "ROOF",
-        "!": "EXCL",
-        "?": "QMARK",
-        "*": "STAR",
-        "+": "PLUS",
-        "-": "MINUS",
-        "/": "SLASH",
-        "\\": "BSLASH",
-        "=": "EQ",
-        "<": "LT",
-        ">": "GT",
-        "~": "TILDE",
-        ":": "COLON",
-        ".": "DOT",
-        "@": "AT",
-        "|": "PIPE"
-    }
-    return _multi_replace(stri, convs)
+SPECIAL_CHAR_ENCODINGS = {
+    "$": "DOLLAR",
+    "%": "PERCENT",
+    "&": "AND",
+    "^": "ROOF",
+    "!": "EXCL",
+    "?": "QMARK",
+    "*": "STAR",
+    "+": "PLUS",
+    "-": "MINUS",
+    "/": "SLASH",
+    "\\": "BSLASH",
+    "=": "EQ",
+    "<": "LT",
+    ">": "GT",
+    "~": "TILDE",
+    ":": "COLON",
+    ".": "DOT",
+    "@": "AT",
+    "|": "PIPE"
+}
 
-# compiler/modulepaths;.nim -> demangleModuleName
-def _decode_module_name(module_name: str) -> str:
-    convs = {
-        "@s": "/",
-        "@h": "#",
-        "@c": ":",
-        "@m": "",
-        "@@": "@"
-    }
-    dec = _multi_replace(module_name, convs)
+def _encode_specialchars(stri):
+    """
+    Encodes special characters in string.
+
+    :type stri: str
+
+    :rtype: str
+    """
+
+    return _multi_replace(stri, SPECIAL_CHAR_ENCODINGS)
+
+MODULE_NAME_DECODINGS = {
+    "@s": "/",
+    "@h": "#",
+    "@c": ":",
+    "@m": "",
+    "@@": "@"
+}
+
+def _decode_module_name(module_name):
+    """
+    Decodes a module name.
+
+    See: compiler/modulepaths;.nim -> demangleModuleName
+
+    :type module_name: str
+
+    :rtype: str
+    """
+
+    dec = _multi_replace(module_name, MODULE_NAME_DECODINGS)
     if dec.endswith(".nim"):
         dec = dec[:-len(".nim")]
     return dec
 
-def _clean_name_ida(name: str) -> str:
-    STRIP_CHARS = r'[()\[\]{} "]'
-    REPLACE_CHARS = r'[,;]'
-    name = re.sub(STRIP_CHARS, "", name)
-    return re.sub(REPLACE_CHARS, "_", name)
+IDA_STRIP_CHARS_RE = re.compile(r'[()\[\]{} "]')
+IDA_REPLACE_CHARS_RE = re.compile(r'[,;]')
 
-# compiler/msgs.nim -> uniqueModuleName
-def demangle_module(name: str) -> str:
+def _clean_name_ida(name):
+    """
+    Cleans up IDA name chars.
+
+    :type name: str
+
+    :rtype: str
+    """
+
+    name = IDA_STRIP_CHARS_RE.sub("", name)
+    return IDA_REPLACE_CHARS_RE.sub("_", name)
+
+def demangle_module(name):
+    """
+    Demangles a module name.
+
+    See: compiler/msgs.nim -> uniqueModuleName
+
+    :type name: str
+
+    :rtype: str
+    """
+
     plain = ""
     i = 0
     while i < len(name):
@@ -118,9 +180,16 @@ def demangle_module(name: str) -> str:
         i += 1
     return plain
 
-# Parse hex encoded substrings strings
-# Returns the parsed value and length and hown many characters were parsed
-def __Xsubstring(substring: str) -> (str, int):
+def __Xsubstring(substring):
+    """
+    Parses a hex encoded substrings strings
+    
+    :type substring: str
+
+    :return: The parsed value and length and hown many characters were parsed
+    :rtype: Tuple[str, int]
+    """
+
     if len(substring) < 3:
         return "X", 1
     elif all(map(lambda c: c in string.hexdigits.upper(), substring[1:3])):
@@ -128,8 +197,17 @@ def __Xsubstring(substring: str) -> (str, int):
     else:
         return "X", 1
 
-# See https://github.com/nim-lang compiler/ccgutils.nim:mangle
-def demangle_function(name: str) -> str:
+def demangle_function(name):
+    """
+    Demangles a function name.
+
+    See: https://github.com/nim-lang compiler/ccgutils.nim:mangle
+
+    :type name: str
+
+    :rtype: str
+    """
+
     plain = ""
     if name[-1] != "_":  # underscore is added at the end of the name if any special encoding had to be performed
         if name[0] == "X":
@@ -157,27 +235,35 @@ def demangle_function(name: str) -> str:
 
     return plain
 
-# Represents a regular Package+function name
 class NimName():
+    """
+    Represents a regular Package+function name
+    """
+
+    # <Function name>__<Package Name>_u<numeric ID>.cold_<numeric IDA suffix>.<compiler suffix>@<C++ mangled arguments>
+    NAME_RE = re.compile(r'^@?([a-zA-Z0-9_]+_?)__([^@_]+)(_u[0-9]+)?(\.cold)?(_[0-9]+)?(\.[a-z]+\.[0-9]+)?(@[0-9]+)?$')
+
+    RELATIVE_RE = re.compile(r"(\.\.\/)+")
+    SLASH_RE = re.compile(r"[/\\\-.]")
+
     def __init__(self, namestr):
-        # <Function name>__<Package Name>_u<numeric ID>_<numeric IDA suffix>.<compiler suffix>@<C++ mangled arguments>
-        m = re.fullmatch(r'@?([a-zA-Z0-9_]+_?)__([^@_]+)(_u[0-9]+)?(_[0-9]+)?(\.[a-z]+\.[0-9]+)?(@[0-9]+)?', namestr)
+        m = NimName.NAME_RE.match(namestr)
         if m is None or len(m.group(1)) <= 1:
             raise ValueError("Invalid Nim function name \"{}\"".format(namestr))
-        self.fnname = demangle_function(m.group(1))
+        self.fnname = demangle_function(m.group(1)) + (".cold" if m.group(4) else "")
         self.pkgname = demangle_module(m.group(2))
         self.suffix = None if m.group(3) is None else m.group(3)[1:]
-        self.ida_suffix = m.group(4)
-        self.num_args = m.group(6)
+        self.ida_suffix = m.group(5)
+        self.num_args = m.group(7)
 
     @property
     def _clean_pkgname(self):
-        re.sub(r"(\.\.\/)+", "../", self.pkgname)
-        return re.sub(r"[/\\\-.]", "_", _clean_name_ida(self.pkgname))
+        tmp = NimName.RELATIVE_RE.sub("../", self.pkgname)
+        return NimName.SLASH_RE.sub("_", _clean_name_ida(tmp))
 
     @property
     def ida_dirname(self):
-        return re.sub(r"(\.\./)+", "_/", self.pkgname)
+        return NimName.RELATIVE_RE.sub(r"(\.\./)+", "_/", self.pkgname)
 
     @property
     def _clean_fnname(self):
@@ -198,8 +284,11 @@ class NimName():
             name = "@{}{}".format(name, self.num_args)
         return name
 
-    # TODO: Implement check when a path is used as the package name
     def is_std(self):
+        """
+        TODO: Implement check when a path is used as the package name
+        """
+
         return any([self.pkgname.startswith(std) for std in NIM_STD])
 
     def is_nimble(self):
@@ -212,8 +301,14 @@ class NimName():
         return "{:s}({:s})".format(type(self).__name__, str(self))
 
 class NimInitName(NimName):
+    """
+    Represents the NimInit name.
+    """
+
+    NAME_RE = re.compile(r'^@?((at|@)m.+)_((Dat|Hcr)?Init[0-9]{3})(_[0-9+])?(@[0-9]+)?$')
+
     def __init__(self, namestr):
-        m = re.fullmatch(r'@?((at|@)m.+)_((Dat|Hcr)?Init[0-9]{3})(_[0-9+])?(@[0-9]+)?', namestr)
+        m = NimInitName.NAME_RE.match(namestr)
         if m is None:
             raise ValueError("Invalid NIM Init name \"{}\"".format(namestr))
         self.fnname = m.group(3)
@@ -228,9 +323,16 @@ class NimInitName(NimName):
     def __str__(self):
         return "{}::{}".format(self.pkgname, self.fnname)
 
-# Returns an instance of the correct subtype of NimName based on the name given
-def NimNameCreator(namestr: str) -> NimName:
-    for T in [*NimName.__subclasses__(), NimName]:
+def NimNameCreator(namestr):
+    """
+    Returns an instance of the correct subtype of NimName based on the name given
+
+    :type namestr: str
+
+    :rtype: NimName
+    """
+
+    for T in [NimInitName, NimName]:
         try:
             name = T(namestr)
             return name
