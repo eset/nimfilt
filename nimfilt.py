@@ -182,11 +182,11 @@ def demangle_module(name):
 
 def __Xsubstring(substring):
     """
-    Parses a hex encoded substrings strings
-    
+    Parses a hex encoded substrings string
+
     :type substring: str
 
-    :return: The parsed value and length and hown many characters were parsed
+    :return: The parsed value and length and how many characters were parsed
     :rtype: Tuple[str, int]
     """
 
@@ -263,7 +263,7 @@ class NimName():
 
     @property
     def ida_dirname(self):
-        return NimName.RELATIVE_RE.sub(r"(\.\./)+", "_/", self.pkgname)
+        return NimName.RELATIVE_RE.sub("_/", self.pkgname)
 
     @property
     def _clean_fnname(self):
@@ -302,7 +302,7 @@ class NimName():
 
 class NimInitName(NimName):
     """
-    Represents the NimInit name.
+    Represents the names of package Init functions.
     """
 
     NAME_RE = re.compile(r'^@?((at|@)m.+)_((Dat|Hcr)?Init[0-9]{3})(_[0-9+])?(@[0-9]+)?$')

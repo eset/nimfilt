@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 ## ###
 # Copyright (c) 2024 ESET
 # Author: Alexandre Côté Cyr <alexandre.cote@eset.com>
 # See LICENSE file for redistribution.
 ##
 # Helps with reversing Nim compiled executables
-# @authors Alexandre Côté Cyr
+# @authors Alexandre Côté Cyr, Alexandre Lavoie
 # @category Nimfilt
 
 ## Imports
