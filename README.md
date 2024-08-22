@@ -4,7 +4,8 @@ Nimfilt is a collection of modules and scripts to help with analyzing [Nim](http
 
  - `nimfilt.py`: a Python module that implements demangling for Nim. It can also be run as basic CLI tool.
  - `id_nim_binary.yar`: a set of YARA rules to identify Nim ELF and PE binaries.
- - `nimimfilt_ida.py`: Nimfilt for IDA, an IDApython script to help reverse-engineers handle Nim binaries.
+ - `nimfilt_ida.py`: Nimfilt for IDA, an IDApython script to help reverse-engineers handle Nim binaries.
+ - `nimfilt_ghidra.py`: Nimfilt for Ghidra, a GhidraScript to help reverse-engineers handle Nim binaries.
 
 
 ## Context
@@ -31,12 +32,28 @@ Add `<nimfilt_project_dir>/nimfilt_ida.py` to your your `plugins.list` as per th
 
 ### Usage
 
-*Note: The current version of Nimfilt for IDA only supports one command which runs all analyses. *
+*Note: The current version of Nimfilt for IDA only supports one command which runs all analyses.*
 
 Navigate to Edit -> Plugins -> Nimfilt and click on it.
 
 You can set Nimfilt to automatically execute when a loaded file is recognized as a Nim binary. To do so, set the `AUTO_RUN` global variable to `True` in `nimfilt_ida.py`
 
+
+## Nimflit for Ghidra
+
+The GhidraScript is a one-off script.
+
+If running as a script, simply launch it from the Nimfilt project directory. It is recommended to do so after auto-analysis has completed and you've loaded any additional FLIRT signatures.
+
+### Manual pluging setup
+
+Copy `nimfilt.py` and `nimfilt_ghidra.py` to your `ghidra_script` directory (usually `$HOME/ghidra_scripts`)
+
+### Usage
+
+*Note: The current version of Nimfilt for Ghidra only supports one command which runs all analyses.*
+
+Navigate to Window -> Script Manager. Find the `nimfilt_ghidra.py` script in the list. Select it and click the `Run` button.
 
 ## Running tests
 
