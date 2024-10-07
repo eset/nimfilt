@@ -26,10 +26,11 @@ from collections import namedtuple
 AUTO_RUN = False
 
 PLUGIN_NAME = "Nimfilt"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
+ST_NIMSTRING_PLD = 3
 
 # These global variables can only be calculated after IDA has loaded the program
 BITNESS = None
@@ -105,6 +106,8 @@ def make_nim_strings():
                         ea += apply_Nim_string_struct(*is_str[1:])
                     elif is_str[0] == ST_NIMSTRING_PTR:
                         ea += apply_Nim_string_ptr_struct(*is_str[1:])
+                    elif is_str[0] == ST_NIMSTRING_PLD:
+                        ea += apply_Nim_string_payload_struct(*is_str[1:])
                     else:
                         raise Exception()
                 else:
@@ -123,13 +126,15 @@ def is_nim_str_payload(ea, ln):
 
 # lib/system/strs_v2.nim -> NimStringV2
 def is_nim_str(ea):
-    ln = get_uint(ea)
+    ln = get_uint(ea) & ~NIM_STRLIT_FLAG
     # Contiguous block string
     if ln > 0:
         if is_nim_str_payload(ea + INT_BYTES, ln):
             return (ST_NIMSTRING, ea, ln)
         elif (addr := ida_xref.get_first_dref_from(ea + INT_BYTES)) != idaapi.BADADDR and is_nim_str_payload(addr, ln):
             return (ST_NIMSTRING_PTR, ea, addr, ln)
+        elif is_nim_str_payload(ea, ln):
+            return (ST_NIMSTRING_PLD, ea, ln)
     return False
 
 """
@@ -194,6 +199,14 @@ def create_IDA_struct(name: str, members: list):
         ida_struct.add_struc_member(struct, field["name"], -1, field["flag"], field["member_type"], field["size"])
     return struct
 
+def apply_Nim_string_payload_struct(start_addr, length):
+    struct_id = idc.get_struc_id("NimStrPayload")
+    size = idc.get_struc_size(struct_id) + length
+    ida_bytes.create_struct(start_addr, size, struct_id, True)
+    content = ida_bytes.get_bytes(start_addr + INT_BYTES, length)
+    ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
+    return size
+
 def apply_Nim_string_struct(start_addr, length):
     struct_id = ida_struct.get_struc_id("NimString")
     size = ida_struct.get_struc_size(struct_id) + length
@@ -223,7 +236,7 @@ def str_to_name(string):
         string = string.decode(default_encoding)
     except AttributeError:
         pass
-    cleaned = ida_name.validate_name(string, ida_name.NT_LOCAL, ida_name.SN_IDBENC).title().replace("_", "")
+    cleaned = ida_name.validate_name(string, ida_name.NT_LOCAL, ida_name.SN_IDBENC | ida_name.SN_NOCHECK).title().replace("_", "")
     return "s{:s}".format(cleaned[:0xE])
 
 # Parse all functions in the current IDB for ones that have nim mangled names
