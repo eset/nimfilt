@@ -14,19 +14,25 @@ import ida_funcs
 import ida_nalt
 import ida_name
 import ida_segment
-import ida_struct
 import ida_xref
 import idaapi
 import idautils
+import idc
 
 from ida_idp import ph_get_cnbits
 from ida_ida import inf_get_app_bitness, inf_is_be
 from collections import namedtuple
 
+# From IDA 9.0 on, bin_search replaces bin_search3
+try:
+    from ida_bytes import bin_search
+except ImportError:
+    from ida_bytes import bin_search3 as bin_search
+
 AUTO_RUN = False
 
 PLUGIN_NAME = "Nimfilt"
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 
 ST_NIMSTRING = 1
 ST_NIMSTRING_PTR = 2
@@ -60,7 +66,7 @@ def get_uint(ea):
 def find_text(string: str):
     pattern = ida_bytes.compiled_binpat_vec_t()
     ida_bytes.parse_binpat_str(pattern, 0, '"{}"'.format(string), 0, ida_nalt.STRENC_DEFAULT)  # Strings must be inside double quotes
-    return ida_bytes.bin_search3(0, ida_segment.get_last_seg().end_ea, pattern, idaapi.BIN_SEARCH_FORWARD)
+    return bin_search(0, ida_segment.get_last_seg().end_ea, pattern, idaapi.BIN_SEARCH_FORWARD)
 
 class Nimfilt_plugin(idaapi.plugin_t):
     comment = ""
@@ -167,37 +173,33 @@ def create_Nim_string_structs():
     INT_TYPES = {1: ida_bytes.FF_BYTE, 2: ida_bytes.FF_WORD, 4: ida_bytes.FF_DWORD, 8: ida_bytes.FF_QWORD, 16: ida_bytes.FF_OWORD}
     str_opinfo = ida_nalt.opinfo_t()
     str_opinfo.strtype = ida_nalt.STRTYPE_TERMCHR
-    if (nsc_struct_id := ida_struct.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
+    if (nsc_struct_id := idc.get_struc_id("NimStrPayload")) == idaapi.BADADDR:
         NimStrPayload = [
-            StructMember("reserved", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, INT_BYTES),
-            StructMember("str", ida_bytes.FF_STRLIT, str_opinfo, 0)
+            StructMember("reserved", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, -1, INT_BYTES),
+            StructMember("str", ida_bytes.FF_STRLIT, str_opinfo.tid, 0)
         ]
-        nsc_struct = create_IDA_struct("NimStrPayload", NimStrPayload)
-        nsc_struct_id = nsc_struct.id
+        nsc_struct_id = create_IDA_struct("NimStrPayload", NimStrPayload)
     # For structs or pointers to structs, the mt argument must be a opinfo_t struct with the tid field set to the structure's id
-    nimstringcontent_opinfo = ida_nalt.opinfo_t()
-    nimstringcontent_opinfo.tid = nsc_struct_id
     structs = {}
-    if ida_struct.get_struc_id("NimString") == idaapi.BADADDR:
+    if idc.get_struc_id("NimString") == idaapi.BADADDR:
         structs["NimString"] = [
-            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, INT_BYTES),
-            StructMember("content", ida_bytes.FF_STRUCT | ida_bytes.FF_DATA, nimstringcontent_opinfo, INT_BYTES)  # Flags for structs
+            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, -1, INT_BYTES),
+            StructMember("content", ida_bytes.FF_STRUCT | ida_bytes.FF_DATA, nsc_struct_id, INT_BYTES)  # Flags for structs
         ]
-    if ida_struct.get_struc_id("NimStringPtr") == idaapi.BADADDR:
+    if idc.get_struc_id("NimStringPtr") == idaapi.BADADDR:
         structs["NimStringPtr"] = [
-            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, None, 4),
-            StructMember("content", INT_TYPES[INT_BYTES] | ida_bytes.FF_0OFF | ida_bytes.FF_1OFF | ida_bytes.FF_DATA, nimstringcontent_opinfo, 4)  # Flags for 32 bit pointers
+            StructMember("length", INT_TYPES[INT_BYTES] | ida_bytes.FF_DATA, -1, 4),
+            StructMember("content", INT_TYPES[INT_BYTES] | ida_bytes.FF_0OFF | ida_bytes.FF_1OFF | ida_bytes.FF_DATA, nsc_struct_id, 4)  # Flags for 32 bit pointers
         ]
     for name, members in structs.items():
         create_IDA_struct(name, members)
 
 def create_IDA_struct(name: str, members: list):
-    struct_id = ida_struct.add_struc(-1, name, False)
-    struct = ida_struct.get_struc(struct_id)
+    struct_id = idc.add_struc(-1, name, False)
     for field in members:
         field = field._asdict()
-        ida_struct.add_struc_member(struct, field["name"], -1, field["flag"], field["member_type"], field["size"])
-    return struct
+        idc.add_struc_member(struct_id, field["name"], -1, field["flag"], field["member_type"], field["size"])
+    return struct_id
 
 def apply_Nim_string_payload_struct(start_addr, length):
     struct_id = idc.get_struc_id("NimStrPayload")
@@ -208,25 +210,25 @@ def apply_Nim_string_payload_struct(start_addr, length):
     return size
 
 def apply_Nim_string_struct(start_addr, length):
-    struct_id = ida_struct.get_struc_id("NimString")
-    size = ida_struct.get_struc_size(struct_id) + length
+    struct_id = idc.get_struc_id("NimString")
+    size = idc.get_struc_size(struct_id) + length
     ida_bytes.create_struct(start_addr, size, struct_id, True)
     content = ida_bytes.get_bytes(start_addr + 2 * INT_BYTES, length)
     ida_name.set_name(start_addr, str_to_name(content), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     return size
 
 def apply_Nim_string_ptr_struct(start_addr, content_addr, length):
-    ptr_struct_id = ida_struct.get_struc_id("NimStringPtr")
-    content_struct_id = ida_struct.get_struc_id("NimStrPayload")
-    ida_bytes.create_struct(start_addr, ida_struct.get_struc_size(ptr_struct_id), ptr_struct_id, True)
-    size = ida_struct.get_struc_size(content_struct_id) + length
+    ptr_struct_id = idc.get_struc_id("NimStringPtr")
+    content_struct_id = idc.get_struc_id("NimStrPayload")
+    ida_bytes.create_struct(start_addr, idc.get_struc_size(ptr_struct_id), ptr_struct_id, True)
+    size = idc.get_struc_size(content_struct_id) + length
     ida_bytes.create_struct(content_addr, size, content_struct_id, True)
     content = ida_bytes.get_bytes(content_addr + INT_BYTES, length)
     name = str_to_name(content)
     ida_name.set_name(content_addr, name, ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
     name = ida_name.get_name(content_addr)  # Get final name in case IDA auto-added a suffix
     ida_name.set_name(start_addr, "ptr_{:s}".format(name), ida_name.SN_AUTO | ida_name.SN_IDBENC | ida_name.SN_PUBLIC | ida_name.SN_FORCE)
-    return ida_struct.get_struc_size(ptr_struct_id)
+    return idc.get_struc_size(ptr_struct_id)
 
 # Returns a name like IDA's default names for string using s as a prefix instead of a
 # TODO: handle strings that contain only special characters
